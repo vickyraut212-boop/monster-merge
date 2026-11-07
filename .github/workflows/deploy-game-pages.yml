@@ -1,9 +1,8 @@
 name: Deploy game to GitHub Pages
 
 # Exports the Godot project in game/ to Web and publishes it on GitHub Pages.
-#   push to main        -> build + deploy
-#   pull request        -> build only (checks the export still works)
-#   manual run          -> build only by default; untick "dry_run" to deploy
+# Every trigger deploys: push to main, pull requests, and manual runs.
+# Note: a pull request deploy replaces the live site with that PR's version.
 on:
   push:
     branches: [main]
@@ -15,17 +14,13 @@ on:
       - "game/**"
       - ".github/workflows/deploy-game-pages.yml"
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Build only, do not deploy"
-        type: boolean
-        default: true
 
 permissions:
   contents: read
 
+# One Pages deploy at a time across all branches and PRs.
 concurrency:
-  group: pages-${{ github.ref }}
+  group: pages
   cancel-in-progress: false
 
 env:
@@ -78,7 +73,6 @@ jobs:
 
   deploy:
     needs: build
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
     runs-on: ubuntu-latest
     permissions:
       pages: write

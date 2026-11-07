@@ -43,7 +43,7 @@ Both workflows run on a push to `main` that touches their folder. You can also s
 | Workflow | Runs when these change | What it does |
 |---|---|---|
 | `deploy-supabase.yml` | `supabase/**` | Links the project, runs `supabase db push`, deploys any Edge Functions |
-| `deploy-game-pages.yml` | `game/**` | Exports the game to Web with headless Godot 4.7 (keep `GODOT_VERSION` in sync with the editor), then publishes it to GitHub Pages. Pull requests and manual runs (by default) only build, without publishing. |
+| `deploy-game-pages.yml` | `game/**` | Exports the game to Web with headless Godot 4.7 (keep `GODOT_VERSION` in sync with the editor), then publishes it to GitHub Pages. Also runs and deploys on pull requests, so a PR replaces the live site with its version. |
 
 Seed data that must reach the hosted database goes in a migration. `supabase db push` does not run `seed.sql`.
 

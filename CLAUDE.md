@@ -36,4 +36,4 @@ Rules (see `docs/ARCHITECTURE.md`):
 - Every Edge Function must use `supabase/functions/_shared/cors.ts`, because the Web build runs in a browser.
 - Never commit real keys. Only the publishable/anon key may appear in game config.
 
-CI: `deploy-supabase.yml` (`supabase/**`) and `deploy-game-pages.yml` (`game/**`) deploy for real on every push to `main`. The Pages workflow also builds (without deploying) on pull requests, and on manual runs unless `dry_run` is unticked.
+CI: `deploy-supabase.yml` (`supabase/**`) and `deploy-game-pages.yml` (`game/**`) deploy on every push to `main` and on manual runs. The Pages workflow also deploys on pull requests, which replaces the live site with the PR's build.
