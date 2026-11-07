@@ -47,7 +47,8 @@ jobs:
 
       - name: Apply migrations
         # CLI 3.x targets the local stack by default; --remote uses the linked project.
-        run: supabase db push --remote
+        # --yes skips the interactive production confirmation, which CI cannot answer.
+        run: supabase db push --remote --yes
 
       - name: Deploy Edge Functions
         run: |
