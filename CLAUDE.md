@@ -37,4 +37,4 @@ Rules (see `docs/ARCHITECTURE.md`):
 - Server endpoints go in the single Hono function `supabase/functions/api/` as routes, not as new functions. Keep `types.ts`, `leaderboard.ts` and `app.ts` free of Supabase code; Supabase access belongs only in `supabase_adapters.ts` and `index.ts`, so the API can move to another provider. Add `PUT`/`DELETE` routes only together with the matching CORS methods.
 - Never commit real keys. Only the publishable/anon key may appear in game config.
 
-CI: `deploy-supabase.yml` (`supabase/**`) and `deploy-game-pages.yml` (`game/**`) deploy on every push to `main` and on manual runs. The Pages workflow also deploys on pull requests, which replaces the live site with the PR's build.
+CI: `deploy-supabase.yml` (`supabase/**`) and `deploy-game-pages.yml` (`game/**`) deploy on every push to `main` and on manual runs. On pull requests the Pages workflow only builds (to check the export works) and skips the deploy; the `github-pages` environment only accepts deploys from `main`.
