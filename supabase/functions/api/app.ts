@@ -4,6 +4,7 @@
 //
 // Routes (under basePath, "/api" on Supabase = /functions/v1/api/...):
 //   GET  /health     -> { ok: true }
+//   GET  /me         -> own name, best score, rank (new players get a random name)
 //   POST /scores     -> submit a run   { score, duration_ms, drops }
 //   PUT  /me/name    -> change name    { name }
 // Signed-in routes need "Authorization: Bearer <player access token>".
@@ -11,7 +12,7 @@
 
 import { Hono, type Context, type MiddlewareHandler } from "npm:hono@4.6.14";
 import { ApiError, type AuthVerifier, type LeaderboardStore } from "./types.ts";
-import { changeName, parseRun, submitScore } from "./leaderboard.ts";
+import { changeName, getMe, parseRun, submitScore } from "./leaderboard.ts";
 
 export interface ApiDeps {
   store: LeaderboardStore;
@@ -68,6 +69,10 @@ export function createApp(deps: ApiDeps, basePath = "/api") {
   };
 
   app.get("/health", (c) => c.json({ ok: true }));
+
+  app.get("/me", requirePlayer, async (c) => {
+    return c.json(await getMe(deps.store, c.get("playerId")));
+  });
 
   app.post("/scores", requirePlayer, async (c) => {
     const run = parseRun(await readBody(c));
