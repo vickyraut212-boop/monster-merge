@@ -20,7 +20,7 @@ Godot uses plain HTTPS with `HTTPRequest`. There is no supabase-js and no plugin
 |---|---|
 | Sign in (anonymous or password), refresh tokens | `/auth/v1/` |
 | Read data (Data API / PostgREST) | `/rest/v1/` |
-| Anything that changes currency, rewards or progression | `/functions/v1/<name>` |
+| Anything that changes currency, rewards or progression | `/functions/v1/api/...` (the Hono game API, see below) |
 
 The client is the `Backend` autoload (`game/scripts/backend/backend.gd`), with the project URL and publishable key in `game/scripts/backend/backend_config.gd`. While either value is empty, the game runs fully offline. `Backend` signs each player in as an anonymous user on first use and keeps the session in `user://session.cfg`. Its methods answer through signals (`score_submitted`, `leaderboard_loaded`, `name_changed`) rather than `await`, so a scene reload mid-request is harmless. A score that can't be sent is saved and retried on the next launch.
 
@@ -32,13 +32,29 @@ An all-time board: each player's best score, top 100.
 |---|---|
 | `public.leaderboard_entries` | One row per player: `display_name`, `best_score`, `achieved_at`. Public read-only. `anon` and `authenticated` can read only `player_id`, `display_name`, `best_score` and `achieved_at`. There are no write privileges or policies. |
 | `public.score_runs` | Every submitted run (`score`, `duration_ms`, `drops`). Service role only. Use it to audit suspicious scores and to build weekly or daily boards later. |
-| `functions/submit-score` | `POST {score, duration_ms, drops}`. Rejects impossible runs (more than 50 points per drop, faster than 0.4 s per drop) and limits each player to one submit every 5 s. Logs the run, raises the best score, and returns `{display_name, best_score, is_new_best, rank, total_players}`. A new player gets a random name like "Bouncy Blob 4821". |
-| `functions/set-display-name` | `POST {name}`. Accepts 3–16 letters, digits, spaces, `_` or `-`, and checks a small blocklist (`_shared/names.ts`). |
+| `POST /functions/v1/api/scores` | Body `{score, duration_ms, drops}`. Rejects impossible runs (more than 50 points per drop, faster than 0.4 s per drop) and limits each player to one submit every 5 s. Logs the run, raises the best score, and returns `{display_name, best_score, is_new_best, rank, total_players}`. A new player gets a random name like "Bouncy Blob 4821". |
+| `PUT /functions/v1/api/me/name` | Body `{name}`. Accepts 3–16 letters, digits, spaces, `_` or `-`, and checks a small blocklist (`_shared/names.ts`). |
 | Game | Reads the top 100 straight from `/rest/v1/leaderboard_entries` with the publishable key. The game-over panel shows the world rank. The pop-up is `scenes/leaderboard.tscn`, opened by the HUD's TOP button or by the game-over Leaderboard button. |
 
-Ranking is by `best_score` descending. On a tie, the earlier `achieved_at` ranks higher. Scores are computed on the device, so the server checks only catch impossible runs. If points, bonuses, `MAX_DROP_TIER` or power-ups change, update `MAX_POINTS_PER_DROP` in `submit-score/index.ts` to match.
+Ranking is by `best_score` descending. On a tie, the earlier `achieved_at` ranks higher. Scores are computed on the device, so the server checks only catch impossible runs. If points, bonuses, `MAX_DROP_TIER` or power-ups change, update `MAX_POINTS_PER_DROP` in `functions/api/leaderboard.ts` to match.
 
-Both functions have `verify_jwt = false` in `config.toml`. They check the caller themselves with `auth.getUser()` (`_shared/supabase.ts`), which also works with the newer asymmetric JWT signing keys.
+## Game API (`supabase/functions/api`)
+
+All writes go through one Edge Function, `api`, built with [Hono](https://hono.dev). It sends every route a JSON error `{error}` with a 4xx or 5xx status, and every response carries the CORS headers from `_shared/cors.ts`. `GET /api/health` is a quick check that the function is up. The files are split so that only two of them depend on Supabase:
+
+| File | Role | Supabase-specific? |
+|---|---|---|
+| `types.ts` | The `LeaderboardStore` and `AuthVerifier` interfaces, plus `ApiError` | No |
+| `leaderboard.ts` | The rules: run checks, best score, rate limit, names | No |
+| `app.ts` | Hono routes, CORS, the signed-in-player middleware, error handling | No (Hono only) |
+| `supabase_adapters.ts` | The store on Postgres (supabase-js with the service-role key) and auth through `auth.getUser()` | **Yes** |
+| `index.ts` | Connects the pieces and calls `Deno.serve(app.fetch)` | **Yes** (entry point) |
+
+To add an endpoint: put the logic in its own file (written against the interfaces), add the route in `app.ts`, and extend `LeaderboardStore` (and its Supabase implementation) if it needs new data.
+
+**Moving off Supabase.** Hono also runs on Node, Bun, Cloudflare Workers and Vercel. You'd write a new store for the new database, a new `AuthVerifier` for the new auth system, and a small entry file. On the game side, you'd point `API_URL` in `backend_config.gd` at the new host. The game still uses Supabase directly in two places, and both would need changing: anonymous sign-in (`/auth/v1/`) and the leaderboard read (`/rest/v1/`), both in `backend.gd`.
+
+`api` has `verify_jwt = false` in `config.toml`. It checks the caller itself through `AuthVerifier`, which also works with the newer asymmetric JWT signing keys and lets CORS preflights and `/health` through.
 
 ## Access rules
 

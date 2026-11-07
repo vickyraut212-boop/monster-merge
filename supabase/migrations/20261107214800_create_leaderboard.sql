@@ -2,7 +2,7 @@
 --
 -- leaderboard_entries: one row per player (their best score and display name).
 --   Public data: everyone may read it, no client may write it. Rows are written
---   only by the submit-score and set-display-name Edge Functions (service role).
+--   only by the game API Edge Function (supabase/functions/api, service role).
 --
 -- score_runs: every submitted run, kept for auditing (finding cheated scores)
 --   and so weekly/daily boards can be built later. Service role only.

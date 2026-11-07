@@ -22,7 +22,7 @@ extends Node
 ## Nothing here ever blocks the game. If a score can't be sent, the best
 ## unsent run is saved and sent again on the next launch.
 
-## result: the submit-score reply ({display_name, best_score, is_new_best,
+## result: the POST /api/scores reply ({display_name, best_score, is_new_best,
 ## rank, total_players}); {"error": message} if the server rejected the run;
 ## {} if the server could not be reached.
 signal score_submitted(result: Dictionary)
@@ -97,7 +97,7 @@ func fetch_top(limit := 100) -> void:
 
 ## Changes the player's leaderboard name. Answers with name_changed.
 func set_display_name(new_name: String) -> void:
-	var response := await _call_function("set-display-name", {"name": new_name})
+	var response := await _call_api(HTTPClient.METHOD_PUT, "/me/name", {"name": new_name})
 	var data: Variant = response["data"]
 	if response["ok"] and data is Dictionary and data.has("display_name"):
 		display_name = data["display_name"]
@@ -114,7 +114,7 @@ func set_display_name(new_name: String) -> void:
 ## Sends one run and updates my_best / my_rank. Returns the result dictionary
 ## described at score_submitted.
 func _post_run(run: Dictionary) -> Dictionary:
-	var response := await _call_function("submit-score", run)
+	var response := await _call_api(HTTPClient.METHOD_POST, "/scores", run)
 	var data: Variant = response["data"]
 	if response["ok"] and data is Dictionary:
 		_clear_pending_up_to(int(run["score"]))
@@ -235,23 +235,29 @@ func _save_session() -> void:
 
 # --- HTTP -------------------------------------------------------------------
 
-## Calls an Edge Function as the signed-in player. If the token is rejected
-## (401), it signs in again once and retries.
-func _call_function(function_name: String, body: Dictionary) -> Dictionary:
+## Calls the game API (BackendConfig.API_URL + path, routes in
+## supabase/functions/api/app.ts) as the signed-in player. If the token is
+## rejected (401), it signs in again once and retries.
+func _call_api(method: HTTPClient.Method, path: String, body: Dictionary) -> Dictionary:
 	if not await _ensure_session():
 		return {"ok": false, "code": 0, "data": null}
-	var path := "/functions/v1/" + function_name
-	var response := await _request(HTTPClient.METHOD_POST, path, body, true)
+	var url := BackendConfig.API_URL.trim_suffix("/") + path
+	var response := await _request_url(method, url, body, true)
 	if response["code"] == 401:
 		_access_token = ""
 		if await _ensure_session():
-			response = await _request(HTTPClient.METHOD_POST, path, body, true)
+			response = await _request_url(method, url, body, true)
 	return response
+
+
+## A request to Supabase itself (auth and Data API), path relative to SUPABASE_URL.
+func _request(method: HTTPClient.Method, path: String, body: Variant, with_token: bool) -> Dictionary:
+	return await _request_url(method, BackendConfig.SUPABASE_URL.trim_suffix("/") + path, body, with_token)
 
 
 ## One HTTPS request. Returns {"ok": bool, "code": int, "data": parsed JSON or null}.
 ## code is 0 when the server could not be reached at all.
-func _request(method: HTTPClient.Method, path: String, body: Variant, with_token: bool) -> Dictionary:
+func _request_url(method: HTTPClient.Method, url: String, body: Variant, with_token: bool) -> Dictionary:
 	var headers := PackedStringArray([
 		"apikey: " + BackendConfig.PUBLISHABLE_KEY,
 		"Content-Type: application/json",
@@ -263,7 +269,6 @@ func _request(method: HTTPClient.Method, path: String, body: Variant, with_token
 	http.timeout = REQUEST_TIMEOUT
 	add_child(http)
 	var payload := JSON.stringify(body) if body != null else ""
-	var url := BackendConfig.SUPABASE_URL.trim_suffix("/") + path
 	if http.request(url, headers, method, payload) != OK:
 		http.queue_free()
 		return {"ok": false, "code": 0, "data": null}
