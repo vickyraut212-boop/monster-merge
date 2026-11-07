@@ -46,7 +46,8 @@ jobs:
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
       - name: Apply migrations
-        run: supabase db push
+        # CLI 3.x targets the local stack by default; --remote uses the linked project.
+        run: supabase db push --remote
 
       - name: Deploy Edge Functions
         run: |
