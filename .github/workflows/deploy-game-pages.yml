@@ -1,8 +1,8 @@
 name: Deploy game to GitHub Pages
 
 # Exports the Godot project in game/ to Web and publishes it on GitHub Pages.
-# Every trigger deploys: push to main, pull requests, and manual runs.
-# Note: a pull request deploy replaces the live site with that PR's version.
+# Push to main and manual runs build and deploy. Pull requests only build,
+# so a PR shows whether the export works without touching the live site.
 on:
   push:
     branches: [main]
@@ -73,6 +73,10 @@ jobs:
 
   deploy:
     needs: build
+    # Pull requests only build (to prove the export works). The github-pages
+    # environment only accepts deploys from main, and a PR deploy would
+    # replace the live site anyway.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       pages: write

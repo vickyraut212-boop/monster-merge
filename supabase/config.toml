@@ -395,6 +395,13 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Game API (Hono). It verifies the caller's token itself with auth.getUser()
+# (see functions/api/supabase_adapters.ts), so the gateway JWT check is off.
+# That also lets /health and CORS preflights through, and keeps it working
+# with the newer asymmetric JWT signing keys.
+[functions.api]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

@@ -20,6 +20,14 @@ extends CanvasLayer
 ## invisible click areas placed over the picture, sized as fractions of it
 ## (anchors), so they stay lined up if the picture is resized. To adjust one,
 ## select it under SettingsPopup/Panel and drag its anchors in the editor.
+##
+## LEADERBOARD
+## The "TOP" button under the settings button and the Leaderboard button on
+## the game-over panel both open the online leaderboard pop-up (Leaderboard,
+## scenes/leaderboard.tscn). The game-over panel's RankLabel shows the
+## player's world rank once main.gd hears back from the server.
+## The TOP button is a plain placeholder button; give it art later by swapping
+## it for a TextureButton with the same name.
 
 signal play_again_pressed
 ## Restart button in the settings pop-up.
@@ -45,11 +53,22 @@ signal power_up_pressed(power_up: String)
 @onready var _final_score_label: Label = $GameOver/Box/FinalScore
 @onready var _final_best_label: Label = $GameOver/Box/FinalBest
 @onready var _play_again_button: Button = $GameOver/Box/PlayAgain
+@onready var _rank_label: Label = $GameOver/Box/RankLabel
+@onready var _leaderboard_button: Button = $GameOver/Box/LeaderboardButton
+@onready var _trophy_button: Button = $TrophyButton
+@onready var _leaderboard: LeaderboardPopup = $Leaderboard
 
 
 func _ready() -> void:
 	_game_over.visible = false
 	_play_again_button.pressed.connect(func() -> void: play_again_pressed.emit())
+	set_rank_text("")
+	_leaderboard_button.pressed.connect(func() -> void:
+		GameAudio.play("click")
+		_leaderboard.open())
+	_trophy_button.pressed.connect(func() -> void:
+		_bounce(_trophy_button)
+		_leaderboard.open())
 	_settings_popup.visible = false
 	_settings_button.pressed.connect(func() -> void:
 		_bounce(_settings_button)
@@ -169,3 +188,11 @@ func show_game_over(score: int, best: int, is_new_best: bool) -> void:
 	_final_score_label.text = "Score: %d" % score
 	_final_best_label.text = ("New best!" if is_new_best else "Best: %d" % best)
 	_game_over.visible = true
+	_trophy_button.visible = false  # the game-over panel has its own button
+
+
+## Online status line on the game-over panel ("World rank #12 of 340",
+## "Offline - ...", or "" to hide it).
+func set_rank_text(text: String) -> void:
+	_rank_label.text = text
+	_rank_label.visible = text != ""

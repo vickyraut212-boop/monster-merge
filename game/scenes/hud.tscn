@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
 [ext_resource type="Texture2D" path="res://assets/ui/scoreboard.png" id="2_scoreboard"]
@@ -9,6 +9,19 @@
 [ext_resource type="Texture2D" path="res://assets/ui/powerup_vanish.png" id="5_vanish"]
 [ext_resource type="Texture2D" path="res://assets/ui/powerup_blast.png" id="6_blast"]
 [ext_resource type="Texture2D" path="res://assets/ui/powerup_upgrade.png" id="7_upgrade"]
+[ext_resource type="PackedScene" path="res://scenes/leaderboard.tscn" id="11_leaderboard"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_trophy"]
+bg_color = Color(0.36, 0.26, 0.52, 0.95)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(1, 0.82, 0.3, 1)
+corner_radius_top_left = 26
+corner_radius_top_right = 26
+corner_radius_bottom_right = 26
+corner_radius_bottom_left = 26
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
 bg_color = Color(1, 1, 1, 0.12)
@@ -41,6 +54,19 @@ pivot_offset = Vector2(44, 44)
 texture_normal = ExtResource("3_settings_button")
 ignore_texture_size = true
 stretch_mode = 5
+
+[node name="TrophyButton" type="Button" parent="."]
+offset_left = 24.0
+offset_top = 124.0
+offset_right = 104.0
+offset_bottom = 204.0
+pivot_offset = Vector2(40, 40)
+theme_override_colors/font_color = Color(1, 0.82, 0.3, 1)
+theme_override_font_sizes/font_size = 26
+theme_override_styles/normal = SubResource("StyleBoxFlat_trophy")
+theme_override_styles/hover = SubResource("StyleBoxFlat_trophy")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_trophy")
+text = "TOP"
 
 [node name="ScorePanel" type="TextureRect" parent="."]
 offset_left = 210.0
@@ -142,9 +168,9 @@ color = Color(0, 0, 0, 0.6)
 
 [node name="Box" type="VBoxContainer" parent="GameOver"]
 offset_left = 140.0
-offset_top = 440.0
+offset_top = 370.0
 offset_right = 580.0
-offset_bottom = 840.0
+offset_bottom = 910.0
 theme_override_constants/separation = 24
 alignment = 1
 
@@ -167,11 +193,24 @@ theme_override_font_sizes/font_size = 32
 text = "Best: 0"
 horizontal_alignment = 1
 
+[node name="RankLabel" type="Label" parent="GameOver/Box"]
+theme_override_colors/font_color = Color(1, 1, 1, 0.8)
+theme_override_font_sizes/font_size = 28
+horizontal_alignment = 1
+autowrap_mode = 3
+
 [node name="PlayAgain" type="Button" parent="GameOver/Box"]
 custom_minimum_size = Vector2(0, 88)
 theme_override_font_sizes/font_size = 36
 theme_override_styles/normal = SubResource("StyleBoxFlat_box")
 text = "Play again"
+
+[node name="LeaderboardButton" type="Button" parent="GameOver/Box"]
+custom_minimum_size = Vector2(0, 72)
+theme_override_colors/font_color = Color(1, 0.82, 0.3, 1)
+theme_override_font_sizes/font_size = 30
+theme_override_styles/normal = SubResource("StyleBoxFlat_box")
+text = "Leaderboard"
 
 [node name="SettingsPopup" type="Control" parent="."]
 visible = false
@@ -234,3 +273,5 @@ anchor_left = 0.21
 anchor_top = 0.7
 anchor_right = 0.78
 anchor_bottom = 0.84
+
+[node name="Leaderboard" parent="." instance=ExtResource("11_leaderboard")]
