@@ -267,6 +267,12 @@ func _request_url(method: HTTPClient.Method, url: String, body: Variant, with_to
 
 	var http := HTTPRequest.new()
 	http.timeout = REQUEST_TIMEOUT
+	# Web build: the browser already unzips gzip responses, but Supabase's REST
+	# API still exposes "Content-Encoding: gzip" to the page, so Godot would try
+	# to unzip the plain body again and fail (the leaderboard showed "Can't
+	# reach"). With accept_gzip off, Godot never decompresses; native builds
+	# keep it on so their responses stay compressed.
+	http.accept_gzip = not OS.has_feature("web")
 	add_child(http)
 	var payload := JSON.stringify(body) if body != null else ""
 	if http.request(url, headers, method, payload) != OK:
