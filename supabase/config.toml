@@ -395,6 +395,15 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Leaderboard functions. They verify the caller's token themselves with
+# auth.getUser() (see functions/_shared/supabase.ts), so the gateway JWT check
+# is off. This also keeps them working with the newer asymmetric JWT signing keys.
+[functions.submit-score]
+verify_jwt = false
+
+[functions.set-display-name]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

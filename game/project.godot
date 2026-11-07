@@ -22,6 +22,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 
 TierData="*res://scripts/tier_data.gd"
 GameAudio="*res://scripts/game_audio.gd"
+Backend="*res://scripts/backend/backend.gd"
 
 [display]
 

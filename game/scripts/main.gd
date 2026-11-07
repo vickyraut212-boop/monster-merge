@@ -14,6 +14,10 @@ var score := 0
 var best := 0
 var _is_over := false
 var _shaker: Shaker
+## For the online leaderboard: how long the run took and how many drops it
+## had (the server uses these to reject impossible scores).
+var _run_started_ms := 0
+var _drops := 0
 
 
 func _ready() -> void:
@@ -28,8 +32,10 @@ func _ready() -> void:
 	jar.game_over.connect(_on_game_over)
 	hud.play_again_pressed.connect(_on_play_again)
 	hud.restart_pressed.connect(_on_play_again)
+	Backend.score_submitted.connect(_on_score_submitted)
 
 	dropper.setup(jar)
+	_run_started_ms = Time.get_ticks_msec()
 
 	# Shake the phone (or press SHAKE on PC) to jostle the monsters.
 	_shaker = Shaker.new()
@@ -40,6 +46,7 @@ func _ready() -> void:
 
 
 func _on_dropped(tier: int, at: Vector2) -> void:
+	_drops += 1
 	_spawn_monster(tier, at)
 
 
@@ -154,6 +161,30 @@ func _on_game_over() -> void:
 		best = score
 		_save_best(best)
 	hud.show_game_over(score, best, is_new_best)
+	_submit_score()
+
+
+## Sends the run to the online leaderboard. The answer arrives later in
+## _on_score_submitted; the game never waits for it.
+func _submit_score() -> void:
+	if not Backend.is_configured() or score <= 0:
+		hud.set_rank_text("")
+		return
+	hud.set_rank_text("Sending score...")
+	Backend.submit_score(score, Time.get_ticks_msec() - _run_started_ms, _drops)
+
+
+func _on_score_submitted(result: Dictionary) -> void:
+	if not _is_over:
+		return
+	if result.has("error"):
+		hud.set_rank_text("Score not accepted online")
+	elif result.is_empty():
+		hud.set_rank_text("Offline - score will be sent later")
+	elif result.get("rank") != null:
+		hud.set_rank_text("World rank #%d of %d" % [int(result["rank"]), int(result["total_players"])])
+	else:
+		hud.set_rank_text("")
 
 
 func _on_play_again() -> void:
