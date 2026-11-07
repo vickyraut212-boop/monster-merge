@@ -1,7 +1,21 @@
 # Godot cache and generated files
 .godot/
 *.import.tmp
-export_presets.cfg
 *.tmp
+
+# Web export output (built in CI, never committed)
+build/
+
+# Supabase local state (supabase/.gitignore covers the rest)
+supabase/.temp/
+supabase/.branches/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
 .DS_Store
 Thumbs.db
+.claude/settings.local.json

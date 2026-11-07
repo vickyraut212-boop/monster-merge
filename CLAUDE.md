@@ -2,11 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project
+## Repository layout
 
-"Monster Merge": a 2D drop-and-merge physics puzzle (Suika-style) in Godot 4.3+ (standard build, GDScript, GL Compatibility renderer, portrait 720x1280). There is no build step, linter or test suite. Run it by opening `project.godot` in the Godot editor and pressing F5 (main scene is `res://scenes/main.tscn`). Headless/CLI runs, if needed: `godot --path . ` (editor binary must be on PATH). On start, `main.gd` warns in the Output panel if any tier sprite is missing.
+Monorepo: `game/` is the Godot project, `supabase/` is the backend (config, migrations, Edge Functions), `docs/ARCHITECTURE.md` describes the backend design, and `.github/workflows/` holds CI. All game paths below are relative to `game/`.
 
-## Architecture
+## Game
+
+"Monster Merge": a 2D drop-and-merge physics puzzle (Suika-style) in Godot 4.7 (standard build, GDScript, GL Compatibility renderer, portrait 720x1280). There is no build step, linter or test suite. Run it by opening `game/project.godot` in the Godot editor and pressing F5 (main scene is `res://scenes/main.tscn`). Headless/CLI runs, if needed: `godot --path game` (editor binary must be on PATH). On start, `main.gd` warns in the Output panel if any tier sprite is missing.
 
 `scenes/main.tscn` wires four children together and `scripts/main.gd` is the coordinator:
 - `Jar` (`jar.gd`) – walls, floor and the danger line; emits `game_over` when a monster stays above the line for 2 s.
@@ -18,6 +20,20 @@ Merge flow: a `Monster` emits `touched_same_tier(a, b)` -> `main.gd` sets `is_me
 
 Autoloads (`project.godot`): `TierData` (`tier_data.gd`) and `GameAudio` (`game_audio.gd`). `TierData` is the single source of truth for tuning: collider radius derives from `BOSS_RADIUS * SIZE_CHART_RATIO * READABILITY_BOOST`, and sprites are auto-scaled to match collider width, so swapping art never changes gameplay size. Points/bonus per tier, `MAX_DROP_TIER` and `BOSS_MERGE_BONUS` also live there. Other helpers: `blink_sprite.gd` (blink animation timing), `shaker.gd` (phone shake / on-screen SHAKE jostles monsters), `intro.gd` (opening animation, first launch only), `space_background.gd` (decorative planets/stars, never over the jar).
 
-## Assets
-
 Each tier needs `assets/monsters/tier_N.png` plus `tier_N_blink_1..3.png`, all exactly the same pixel size (transparent background, centred, max 768px); missing blink frames just disable blinking. `GameAudio` generates placeholder sounds in code; dropping files like `pop.ogg` or `music.ogg` into `assets/audio/` replaces them. Tier sizes follow `docs/size_chart.png`.
+
+`game/export_presets.cfg` has the "Web" preset used by CI. It must stay single-threaded (`variant/thread_support=false`) because GitHub Pages can't send cross-origin isolation headers.
+
+## Backend (Supabase)
+
+The Supabase CLI runs through `npx supabase` (pinned to 3.0.0 in CI) and needs Docker for the local stack (`npx supabase start`, `npx supabase db reset`). Migrations go in `supabase/migrations/` (create them with `npx supabase migration new <name>`). Seed data meant for the hosted DB goes in a migration, because `db push` doesn't run `seed.sql`. `public.test_items` is a smoke-test table and can be dropped once real tables exist.
+
+Rules (see `docs/ARCHITECTURE.md`):
+- Godot talks to Supabase with plain `HTTPRequest` calls to `/auth/v1/`, `/rest/v1/` and `/functions/v1/`. No supabase-js and no plugins.
+- Public data: RLS `select` for `anon` with `using (true)`, and no client writes.
+- Private data: `to authenticated` with `auth.uid() = id`, and no `anon` policy.
+- Currency, rewards and progression are written only by Edge Functions using the service-role key. Use Edge Functions for these, not SQL RPCs.
+- Every Edge Function must use `supabase/functions/_shared/cors.ts`, because the Web build runs in a browser.
+- Never commit real keys. Only the publishable/anon key may appear in game config.
+
+CI: `deploy-supabase.yml` (`supabase/**`) and `deploy-game-pages.yml` (`game/**`) deploy for real on every push to `main`. The Pages workflow also builds (without deploying) on pull requests, and on manual runs unless `dry_run` is unticked.
