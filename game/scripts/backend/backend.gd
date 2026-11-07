@@ -15,6 +15,7 @@ extends Node
 ##   submit_score(score, duration_ms, drops) -> score_submitted(result)
 ##   fetch_top(limit)                        -> leaderboard_loaded(entries, ok)
 ##   set_display_name(name)                  -> name_changed(result)
+##   fetch_me()                              -> me_loaded(result)
 ## Signals (rather than awaiting) keep things safe when the scene reloads
 ## while a request is still on its way: freed listeners are just disconnected.
 ##
@@ -32,6 +33,9 @@ signal leaderboard_loaded(entries: Array, ok: bool)
 ## result: {"display_name": name} on success, {"error": message} if the name
 ## was rejected, {} if the server could not be reached.
 signal name_changed(result: Dictionary)
+## result: {display_name, best_score, rank, total_players} for this player
+## (a new player gets a random name), or {} if the server could not be reached.
+signal me_loaded(result: Dictionary)
 
 signal _session_done(ok: bool)
 
@@ -93,6 +97,23 @@ func fetch_top(limit := 100) -> void:
 		leaderboard_loaded.emit(response["data"], true)
 	else:
 		leaderboard_loaded.emit([], false)
+
+
+## Loads this player's own name, best score and rank from the server (the
+## server is the source of truth; the copy in session.cfg is only a cache).
+## A new player gets a random name here. Answers with me_loaded.
+func fetch_me() -> void:
+	var response := await _call_api(HTTPClient.METHOD_GET, "/me", null)
+	var data: Variant = response["data"]
+	if response["ok"] and data is Dictionary and data.has("display_name"):
+		display_name = str(data["display_name"])
+		my_best = int(data.get("best_score", 0))
+		my_rank = int(data["rank"]) if data.get("rank") != null else 0
+		total_players = int(data.get("total_players", 0))
+		_save_session()
+		me_loaded.emit(data)
+	else:
+		me_loaded.emit({})
 
 
 ## Changes the player's leaderboard name. Answers with name_changed.
@@ -237,8 +258,9 @@ func _save_session() -> void:
 
 ## Calls the game API (BackendConfig.API_URL + path, routes in
 ## supabase/functions/api/app.ts) as the signed-in player. If the token is
-## rejected (401), it signs in again once and retries.
-func _call_api(method: HTTPClient.Method, path: String, body: Dictionary) -> Dictionary:
+## rejected (401), it signs in again once and retries. body is null for GET
+## (browsers refuse a GET with a body).
+func _call_api(method: HTTPClient.Method, path: String, body: Variant) -> Dictionary:
 	if not await _ensure_session():
 		return {"ok": false, "code": 0, "data": null}
 	var url := BackendConfig.API_URL.trim_suffix("/") + path

@@ -32,6 +32,7 @@ func _ready() -> void:
 	_name_edit.text_submitted.connect(func(_text: String) -> void: _on_save_pressed())
 	Backend.leaderboard_loaded.connect(_on_leaderboard_loaded)
 	Backend.name_changed.connect(_on_name_changed)
+	Backend.me_loaded.connect(_on_me_loaded)
 
 
 func open() -> void:
@@ -53,6 +54,9 @@ func open() -> void:
 	if online:
 		_status.text = "Loading..."
 		_status.visible = true
+		# Ask the server who this player is (new players get a random name).
+		_name_edit.placeholder_text = "Loading name..."
+		Backend.fetch_me()
 		Backend.fetch_top(TOP_LIMIT)
 	else:
 		_status.text = "The online leaderboard isn't set up yet."
@@ -92,8 +96,28 @@ func _on_leaderboard_loaded(entries: Array, ok: bool) -> void:
 	_show_my_rank(found_me)
 
 
+## The server's answer to "who am I": put the real name in the box (unless
+## the player is typing) and refresh the rank line.
+func _on_me_loaded(result: Dictionary) -> void:
+	if not visible:
+		return
+	_name_edit.placeholder_text = "Your name"
+	if result.is_empty():
+		return
+	if not _name_edit.has_focus() and not _save.disabled:
+		_name_edit.text = Backend.display_name
+	_show_my_rank(_my_row_shown())
+
+
+func _my_row_shown() -> bool:
+	for row in _rows.get_children():
+		if row.has_meta("is_me") and row.get_meta("is_me"):
+			return true
+	return false
+
+
 ## The player's own rank under the list, when they are not in the top 100
-## (from their last score submit).
+## (from the server, or their last score submit).
 func _show_my_rank(in_list: bool) -> void:
 	if in_list:
 		_my_rank.text = "You're on the board!"
@@ -105,6 +129,7 @@ func _show_my_rank(in_list: bool) -> void:
 
 func _make_row(rank: int, player_name: String, best_score: int, is_me: bool) -> Control:
 	var row := PanelContainer.new()
+	row.set_meta("is_me", is_me)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE  # let drags scroll the list
 	var style := StyleBoxFlat.new()
 	style.bg_color = MY_ROW_COLOR if is_me else ROW_COLOR

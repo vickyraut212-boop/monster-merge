@@ -109,6 +109,45 @@ export async function submitScore(
   };
 }
 
+export interface MeResult {
+  display_name: string;
+  best_score: number;
+  rank: number | null; // null while the best score is still 0
+  total_players: number;
+}
+
+/**
+ * The calling player's own name, best score and rank. A player who has no
+ * entry yet gets one now with a random name (best score 0, so they are not
+ * listed on the board until they score), so every player has a name from
+ * their first contact.
+ */
+export async function getMe(store: LeaderboardStore, playerId: string): Promise<MeResult> {
+  let entry = await store.getEntry(playerId);
+  if (!entry) {
+    try {
+      await store.createEntry(playerId, {
+        display_name: randomName(),
+        best_score: 0,
+        achieved_at: null,
+        last_submit_at: null,
+      });
+    } catch (err) {
+      // Another request may have created it at the same moment; use theirs.
+      if (!(await store.getEntry(playerId))) throw err;
+    }
+    entry = await store.getEntry(playerId);
+    if (!entry) throw new Error("entry missing after create");
+  }
+  const ranking = entry.best_score > 0 ? await store.rankOf(entry.best_score, entry.achieved_at) : null;
+  return {
+    display_name: entry.display_name,
+    best_score: entry.best_score,
+    rank: ranking?.rank ?? null,
+    total_players: ranking?.total_players ?? 0,
+  };
+}
+
 /** Validates and saves a new display name. Throws ApiError(400) if rejected. */
 export async function changeName(
   store: LeaderboardStore,
