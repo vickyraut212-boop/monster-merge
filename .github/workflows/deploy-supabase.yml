@@ -57,5 +57,7 @@ jobs:
           if [ -z "$functions" ]; then
             echo "No Edge Functions to deploy."
           else
-            supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
+            # --yes: CLI 3.x asks for confirmation before deploying to production,
+            # which CI cannot answer. --remote=<ref> replaces the deprecated --project-ref.
+            supabase functions deploy --remote="$SUPABASE_PROJECT_REF" --yes
           fi
