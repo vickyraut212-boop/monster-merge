@@ -1,54 +1,56 @@
 class_name Jar
 extends Node2D
 ## The jar the monsters fall into: left wall, right wall, floor, and the
-## danger line near the top. If any monster stays above the danger line for
-## GAME_OVER_DELAY seconds, the jar emits game_over.
+## danger line across its open top. If any monster stays above the danger line
+## for game_over_delay seconds, the jar emits game_over.
 ##
 ## All sizes are in screen pixels (the screen is 720 x 1280).
 
 signal game_over
 
-## LOOK
-## The jar is a glass box seen from slightly above, like vicky's glass
-## container art: a front pane with a glowing edge, two side panes going back
-## in perspective (their back corners rise above the rim like little fins),
-## and a glass floor. It reaches almost to both screen edges. The front pane
-## is drawn over the monsters (they are inside the box); everything else is
-## drawn behind them.
+## LOOK (drawn in code, following vicky's U-shaped glass container art)
+## A thick glowing glass U open at the top that stretches right across the
+## screen, edge to edge: a bright OUTER tube hugging the screen sides, and a
+## thinner INNER glass line just inside it. The red dashed game-over line runs
+## across the open top. The outer tube is drawn over the monsters; everything
+## else is drawn behind them.
 ##
-## The invisible walls the monsters bump into sit halfway back along the side
-## panes and the floor, so the monsters look like they stand in the middle of
-## the box.
+## The invisible walls the monsters bump into sit just inside the glass, so
+## the monsters can use the full width of the screen. The bottom corners have
+## curved colliders that follow the rounded glass.
 
-## Inside of the jar (the space monsters can occupy).
+## Inside of the jar (the space monsters can occupy) = inside the glass.
 ## inner_left centres it: (720 - inner_width) / 2.
-## The rim sits at y 535 (where vicky marked it) so the pile reaches the
-## danger line quickly; the floor is at inner_top + inner_height = 1060.
-@export var inner_left := 52.0
-@export var inner_top := 535.0
-@export var inner_width := 616.0
-@export var inner_height := 525.0
+## The rim (and the danger line) is at y 517; the floor at
+## inner_top + inner_height = 1010.
+@export var inner_left := 18.0
+@export var inner_top := 517.0
+@export var inner_width := 684.0
+@export var inner_height := 493.0
 
 ## How thick the invisible walls are (they collide but are not drawn).
 @export var wall_thickness := 24.0
 
-@export_group("Glass box")
-## How far the side panes go back, left to right, from the front pane to the
-## back corner (the invisible wall is halfway).
-@export var depth_x := 90.0
-## How much higher the back of the floor is than the front (perspective).
-@export var depth_y := 56.0
-## How far the back corner fins rise above the front rim.
-@export var fin_height := 75.0
-@export var glass_fill := Color(0.72, 0.8, 1.0, 0.16)
-@export var floor_fill := Color(0.72, 0.8, 1.0, 0.24)
-@export var front_fill := Color(0.85, 0.92, 1.0, 0.05)
-@export var edge_color := Color(0.88, 0.94, 1.0, 0.9)
-@export var glow_color := Color(0.55, 0.75, 1.0, 0.35)
-@export var shine_color := Color(1.0, 1.0, 1.0, 0.1)
+@export_group("Glass")
+## Outer tube: its distance from the screen sides, how far it reaches below
+## the floor, how round its bottom corners are, and how thick it is.
+@export var outer_margin := 5.0
+@export var outer_below_floor := 13.0
+@export var outer_corner := 100.0
+@export var outer_width := 14.0
+## Inner glass line: how thick it is and how far below the rim it starts.
+## It follows the outer tube's corners.
+@export var inner_tube_width := 6.0
+@export var inner_tube_top := 6.0
+@export var outer_top_color := Color(0.7, 0.94, 1.0, 0.95)
+@export var outer_bottom_color := Color(0.66, 0.64, 1.0, 0.95)
+@export var glow_color := Color(0.5, 0.78, 1.0, 0.36)
+@export var inner_tube_color := Color(0.78, 0.88, 1.0, 0.32)
+@export var glass_fill := Color(0.78, 0.86, 1.0, 0.05)
+@export var shine_color := Color(1.0, 1.0, 1.0, 0.12)
 
-## How far below the rim the danger line sits.
-@export var danger_line_offset := 40.0
+## How far below the rim the danger line sits (0 = right across the top).
+@export var danger_line_offset := 0.0
 
 ## Seconds a monster may stay above the danger line before game over.
 @export var game_over_delay := 2.0
@@ -58,14 +60,18 @@ signal game_over
 @export var wall_bounce := 0.05
 
 @export_group("")
-@export var danger_color := Color(1.0, 0.35, 0.4)
+## The dashed line: soft pink normally, bright red while a monster is above it.
+@export var line_color := Color(1.0, 0.62, 0.74, 0.85)
+@export var danger_color := Color(1.0, 0.3, 0.38)
+
+const SCREEN_WIDTH := 720.0
 
 var _danger_zone: Area2D
 ## How long each monster (by instance id) has been above the danger line.
 var _time_above_line := {}
 var _in_danger := false
 var _is_over := false
-## Draws the front pane over the monsters.
+## Draws the outer tube over the monsters.
 var _front: Node2D
 
 
@@ -110,6 +116,24 @@ func _build_walls() -> void:
 	_add_wall(walls, Rect2(inner_left - t, 0.0, t, floor_y + t))
 	_add_wall(walls, Rect2(right, 0.0, t, floor_y + t))
 	_add_wall(walls, Rect2(inner_left - t, floor_y, inner_width + t * 2.0, t))
+	# Fill the bottom corners so monsters roll along the rounded glass
+	# instead of sinking into the square corner behind it.
+	var r := _inner_corner()
+	for side in [-1.0, 1.0]:
+		var corner_x: float = inner_left if side < 0.0 else right
+		var center := Vector2(corner_x - side * r, floor_y - r)
+		var points := PackedVector2Array([Vector2(corner_x, floor_y)])
+		for i in 17:
+			var a := lerpf(0.0, PI / 2.0, i / 16.0)
+			points.append(center + Vector2(side * cos(a), sin(a)) * r)
+		var filler := CollisionPolygon2D.new()
+		filler.polygon = points
+		walls.add_child(filler)
+
+
+## Radius of the monster space's bottom corners (inside the glass).
+func _inner_corner() -> float:
+	return outer_corner - (inner_left - outer_margin)
 
 
 func _add_wall(parent: Node, rect: Rect2) -> void:
@@ -168,64 +192,103 @@ func _counts_for_danger(body: Node) -> bool:
 	return true
 
 
-## Corners of the glass box. "Front" corners are the pane nearest the player;
-## "back" corners are where the side panes meet the (open) back.
-func _box() -> Dictionary:
-	var half := depth_x / 2.0
-	var left := inner_left
-	var right := inner_left + inner_width
-	var floor_y := get_floor_y()
-	var lift := depth_y / 2.0
-	return {
-		"front_tl": Vector2(left - half, inner_top),
-		"front_tr": Vector2(right + half, inner_top),
-		"front_bl": Vector2(left - half, floor_y + lift),
-		"front_br": Vector2(right + half, floor_y + lift),
-		"back_tl": Vector2(left + half, inner_top - fin_height),
-		"back_tr": Vector2(right - half, inner_top - fin_height),
-		"back_bl": Vector2(left + half, floor_y - lift),
-		"back_br": Vector2(right - half, floor_y - lift),
-	}
+## Centre line of the outer tube.
+func _outer_path() -> PackedVector2Array:
+	return _u_path(outer_margin, SCREEN_WIDTH - outer_margin, inner_top,
+			get_floor_y() + outer_below_floor, outer_corner)
 
 
-## Side panes, floor and danger line, behind the monsters.
+## Centre line of the thin inner glass line, just inside the outer tube.
+func _inner_path() -> PackedVector2Array:
+	var inset := outer_width / 2.0 + inner_tube_width / 2.0 + 1.0
+	return _u_path(outer_margin + inset, SCREEN_WIDTH - outer_margin - inset, inner_top + inner_tube_top,
+			get_floor_y() + outer_below_floor - inset, outer_corner - inset)
+
+
+## Faint glass tint, the shine, the inner glass line and the dashed line,
+## behind the monsters.
 func _draw() -> void:
-	var b := _box()
-	var left_pane := PackedVector2Array([b.front_tl, b.back_tl, b.back_bl, b.front_bl])
-	var right_pane := PackedVector2Array([b.back_tr, b.front_tr, b.front_br, b.back_br])
-	var floor_pane := PackedVector2Array([b.back_bl, b.back_br, b.front_br, b.front_bl])
-	draw_colored_polygon(left_pane, glass_fill)
-	draw_colored_polygon(right_pane, glass_fill)
-	draw_colored_polygon(floor_pane, floor_fill)
-	for edge in [[b.front_tl, b.back_tl], [b.back_tl, b.back_bl], [b.back_bl, b.back_br],
-			[b.back_br, b.back_tr], [b.back_tr, b.front_tr]]:
-		_glow_line(self, edge[0], edge[1], 2.0)
+	var outer := _outer_path()
+	var inner := _inner_path()
 
-	var right := inner_left + inner_width
-	var line_color := danger_color if _in_danger else Color(danger_color, 0.45)
+	# A very faint tint over the whole inside, so it reads as glass.
+	draw_colored_polygon(outer, glass_fill)
+
+	# Shine: a diagonal glare in the top-left corner of the glass...
+	var top := inner_top
+	var l := outer_margin + outer_width
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(l, top + 40.0), Vector2(l + 70.0, top),
+		Vector2(l + 110.0, top), Vector2(l, top + 120.0),
+	]), shine_color)
+	# ...and a broad faint glare across the bottom right.
+	var br := Vector2(SCREEN_WIDTH - outer_margin, get_floor_y() + outer_below_floor)
+	draw_colored_polygon(PackedVector2Array([
+		br + Vector2(-290, -30), br + Vector2(-80, -330), br + Vector2(-30, -290), br + Vector2(-220, -15),
+	]), Color(1, 1, 1, 0.045))
+
+	# Thin inner glass line, hugging the outer tube.
+	_tube(self, inner, inner_tube_width, inner_tube_color, inner_tube_color, 0.7)
+
+	# The game-over line across the open top.
 	var y := get_danger_y()
-	draw_dashed_line(Vector2(inner_left, y), Vector2(right, y), line_color, 4.0, 16.0)
+	var color := danger_color if _in_danger else line_color
+	draw_dashed_line(Vector2(outer_margin, y), Vector2(SCREEN_WIDTH - outer_margin, y), color, 5.0, 20.0, true, true)
 
 
-## Front pane, over the monsters: a faint tint, a diagonal shine in the top
-## left corner, and the glowing outline.
+## The outer tube, over the monsters.
 func _draw_front() -> void:
-	var b := _box()
-	var pane := Rect2(b.front_tl, b.front_br - b.front_tl)
-	_front.draw_rect(pane, front_fill)
-	var w := pane.size.x
-	var shine := PackedVector2Array([
-		b.front_tl + Vector2(w * 0.1, 0), b.front_tl + Vector2(w * 0.3, 0),
-		b.front_tl + Vector2(0, w * 0.3), b.front_tl + Vector2(0, w * 0.1),
-	])
-	_front.draw_colored_polygon(shine, shine_color)
-	for edge in [[b.front_tl, b.front_tr], [b.front_tr, b.front_br],
-			[b.front_br, b.front_bl], [b.front_bl, b.front_tl]]:
-		_glow_line(_front, edge[0], edge[1], 3.0)
+	_tube(_front, _outer_path(), outer_width, outer_top_color, outer_bottom_color, 1.0)
 
 
-## A glass edge: wide soft glow underneath, crisp light line on top.
-func _glow_line(canvas: CanvasItem, from: Vector2, to: Vector2, width: float) -> void:
-	canvas.draw_line(from, to, glow_color, width + 8.0, true)
-	canvas.draw_line(from, to, edge_color, width, true)
+## A glass tube along `path`: wide soft glow, a coloured body that shades
+## from top_color to bottom_color, a darker rim, and bright highlights running
+## along it. `strength` fades the whole tube.
+func _tube(canvas: CanvasItem, path: PackedVector2Array, width: float,
+		top_color: Color, bottom_color: Color, strength: float) -> void:
+	var top := path[0].y
+	var bottom := top
+	for p in path:
+		bottom = maxf(bottom, p.y)
+	var body := PackedColorArray()
+	var rim := PackedColorArray()
+	for p in path:
+		var t := clampf((p.y - top) / maxf(bottom - top, 1.0), 0.0, 1.0)
+		var c := top_color.lerp(bottom_color, t * t)
+		body.append(Color(c.lightened(0.25), c.a * strength))
+		rim.append(Color(c.darkened(0.2), 0.85 * strength))
+	canvas.draw_polyline(path, Color(glow_color, glow_color.a * strength), width + 20.0, true)
+	canvas.draw_polyline(path, Color(glow_color, glow_color.a * strength * 1.5), width + 8.0, true)
+	canvas.draw_polyline_colors(path, rim, width, true)
+	canvas.draw_polyline_colors(path, body, width * 0.55, true)
+	# Highlights: a bright line along the inside, a fainter one along the outside.
+	canvas.draw_polyline(_offset_path(path, width * 0.2), Color(1, 1, 1, 0.8 * strength), 2.5, true)
+	canvas.draw_polyline(_offset_path(path, -width * 0.32), Color(1, 1, 1, 0.3 * strength), 1.5, true)
 
+
+## A U shape (open at the top) from (left, top) down, round the bottom
+## corners, and back up to (right, top).
+func _u_path(left: float, right: float, top: float, bottom: float, radius: float) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	points.append(Vector2(left, top))
+	var steps := 24
+	for i in steps + 1:
+		var a := PI - (PI / 2.0) * float(i) / steps  # 180 -> 90 degrees
+		points.append(Vector2(left + radius, bottom - radius) + Vector2(cos(a), sin(a)) * radius)
+	for i in steps + 1:
+		var a := PI / 2.0 - (PI / 2.0) * float(i) / steps  # 90 -> 0 degrees
+		points.append(Vector2(right - radius, bottom - radius) + Vector2(cos(a), sin(a)) * radius)
+	points.append(Vector2(right, top))
+	return points
+
+
+## Moves every point of a U path towards the inside of the U (negative = out).
+func _offset_path(path: PackedVector2Array, amount: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for i in path.size():
+		var prev := path[maxi(i - 1, 0)]
+		var next := path[mini(i + 1, path.size() - 1)]
+		var dir := (next - prev).normalized()
+		# The path runs down, right, then up; (dir.y, -dir.x) points into the U.
+		out.append(path[i] + Vector2(dir.y, -dir.x) * amount)
+	return out

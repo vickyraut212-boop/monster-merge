@@ -1,15 +1,13 @@
 class_name Hud
 extends CanvasLayer
-## On-screen UI: the settings button and pop-up, the score cloud, vicky's
-## evolution chart panel, the power-up buttons, and the game-over panel.
-## (The next monster is shown inside the ship's glass dome.)
+## On-screen UI: the settings button and pop-up, the score cloud, the Next
+## box, the power-up panel, and the game-over panel.
 ##
-## LAYOUT
-## - EvolutionChart: vicky's monster panel (assets/ui/evolution_chart.png) in
-##   the top-right corner, opposite the settings button.
-## - PowerUpBar: a rounded glass badge (assets/ui/powerup_bar.png) under the
-##   jar, holding the Vanish, Blast and Upgrade buttons (PowerUps). Keep its
-##   size at the picture's shape (about 420 x 118) so the round ends stay round.
+## LAYOUT (following vicky's UI reference)
+## - NextPanel: top-right corner, opposite the settings button. A dark rounded
+##   box with "NEXT" over vicky's purple backing and the next monster.
+## - PowerUpPanel: the wide rounded purple panel under the jar. PowerUps holds
+##   its four round buttons (Merge, Bomb, Upgrade, Battery), evenly spaced.
 ## Move or resize any of them in the editor.
 ##
 ## The HUD keeps running while the game is paused (process_mode = Always), so
@@ -39,11 +37,12 @@ signal home_pressed
 ## "vibrate", "effects"). Sound, Music and Vibrate are switched by the HUD
 ## itself through GameAudio; Effects has no job yet.
 signal setting_pressed(setting: String)
-## A power-up button ("vanish", "blast", "upgrade"). Nothing listens yet: what
-## each power-up does is still to be decided.
+## A power-up button ("merge", "bomb", "upgrade", "battery"). main.gd uses
+## "battery" to shake the jar; power_ups.gd handles the other three.
 signal power_up_pressed(power_up: String)
 
 @onready var _settings_button: TextureButton = $SettingsButton
+@onready var _next_icon: TextureRect = $NextPanel/NextIcon
 @onready var _settings_popup: Control = $SettingsPopup
 @onready var _settings_panel: Control = $SettingsPopup/Panel
 @onready var _power_ups: Control = $PowerUps
@@ -79,6 +78,79 @@ func _ready() -> void:
 		button.pressed.connect(func() -> void:
 			_bounce(button)
 			power_up_pressed.emit(power_up))
+
+
+## The power-up button with this name ("merge", "bomb", "upgrade", "battery").
+func get_power_up_button(power_up: String) -> TextureButton:
+	return _power_ups.get_node_or_null(power_up.capitalize()) as TextureButton
+
+
+## Shows how many uses a power-up has left in the round bubble at the top
+## right of its button. At 0 the button and bubble grey out.
+func set_power_up_count(power_up: String, count: int) -> void:
+	var button := get_power_up_button(power_up)
+	if button == null:
+		return
+	var badge := button.get_node_or_null("Count") as Panel
+	if badge == null:
+		badge = _make_count_badge()
+		button.add_child(badge)
+	(badge.get_node("Label") as Label).text = str(count)
+	var empty := count <= 0
+	(badge.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = \
+			Color(0.45, 0.42, 0.55) if empty else Color(1.0, 0.32, 0.52)
+	button.self_modulate = Color(0.5, 0.5, 0.58) if empty else Color.WHITE
+
+
+## Little bounce on a power-up's count bubble (when it gains a use).
+func pop_power_up_count(power_up: String) -> void:
+	var button := get_power_up_button(power_up)
+	var badge := button.get_node_or_null("Count") if button else null
+	if badge == null:
+		return
+	badge.scale = Vector2(1.6, 1.6)
+	badge.create_tween().tween_property(badge, "scale", Vector2.ONE, 0.3) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## Side-to-side "no" shake on a power-up button (no uses left).
+func shake_power_up_button(power_up: String) -> void:
+	var button := get_power_up_button(power_up)
+	if button == null:
+		return
+	var x := button.position.x
+	var tween := button.create_tween()
+	for dx in [10.0, -10.0, 6.0, -4.0, 0.0]:
+		tween.tween_property(button, "position:x", x + dx, 0.04)
+
+
+## The round count bubble: pink with a white rim and a white number.
+func _make_count_badge() -> Panel:
+	var badge := Panel.new()
+	badge.name = "Count"
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.size = Vector2(40, 40)
+	badge.position = Vector2(84, -2)
+	badge.pivot_offset = badge.size / 2.0
+	var style := StyleBoxFlat.new()
+	style.set_corner_radius_all(20)
+	style.set_border_width_all(3)
+	style.border_color = Color.WHITE
+	style.shadow_color = Color(0.1, 0.02, 0.2, 0.4)
+	style.shadow_size = 4
+	style.shadow_offset = Vector2(0, 2)
+	style.anti_aliasing = true
+	badge.add_theme_stylebox_override("panel", style)
+	var label := Label.new()
+	label.name = "Label"
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 22)
+	label.add_theme_color_override("font_outline_color", Color(0.45, 0.05, 0.2))
+	label.add_theme_constant_override("outline_size", 5)
+	badge.add_child(label)
+	return badge
 
 
 ## Shows the settings pop-up and pauses the game underneath it.
@@ -182,6 +254,10 @@ func set_score(score: int) -> void:
 
 func set_best(best: int) -> void:
 	_best_label.text = "BEST %d" % best
+
+
+func set_next(tier: int) -> void:
+	_next_icon.texture = TierData.get_texture(tier)
 
 
 func show_game_over(score: int, best: int, is_new_best: bool) -> void:

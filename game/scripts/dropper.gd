@@ -1,24 +1,22 @@
 class_name Dropper
 extends Node2D
 ## The alien spaceship at the top of the jar, holding the current monster in
-## its tractor beam, with the monster that comes after it riding inside the
-## ship's glass dome (this replaces the old Next box). It follows the mouse or
-## finger smoothly, shows a dashed aim line down into the jar, and drops the
-## monster when the mouse button or finger is released.
+## its tractor beam. (The monster after it is shown in the HUD's Next box.)
+## It follows the mouse or finger smoothly, shows a dashed aim line down into
+## the jar, and drops the monster when the mouse button or finger is released.
 ##
 ## SPACESHIP ART
-## The saucer is vicky's 3D art (assets/ui/alien_ship.png), cut out without
-## the dome and the beam. The glass dome is drawn in code on top of it, so the
-## next monster can sit inside the glass, and the beam is drawn in code so it
-## can reach down to the held monster. To swap the saucer, select the Dropper
-## node and drag another PNG into "Ship Texture" in the Inspector; "Ship
-## Width" sets how wide it appears and the "Dome" settings size the glass.
-## Clearing "Ship Texture" falls back to the UFO drawn in code (see _draw_ship).
+## The ship is vicky's original 3D art (assets/ui/alien_ship.png): the
+## rainbow saucer with the little green alien in its glass dome. The beam is
+## drawn in code so it can reach down to the held monster. To swap the ship,
+## select the Dropper node and drag another PNG into "Ship Texture" in the
+## Inspector; "Ship Width" sets how wide it appears. Clearing "Ship Texture"
+## falls back to the UFO drawn in code (see _draw_ship).
 ##
 ## DROP ORDER
 ## The very first drop of the game is always Tier 1. After that, every drop is
 ## a random pick between Tier 1 and TierData.MAX_DROP_TIER (Tier 3).
-## Tiers 4 to 7 never drop; they are only made by merging.
+## Tiers 4 to 8 never drop; they are only made by merging.
 ## The rule lives in _pick_tier() below.
 
 signal dropped(tier: int, at: Vector2)
@@ -26,7 +24,7 @@ signal next_changed(tier: int)
 
 ## How far above the jar's rim the waiting monster hangs.
 ## (The height follows the jar, so moving the jar moves the ship too.)
-@export var hold_above_rim := 55.0
+@export var hold_above_rim := 150.0
 ## Seconds between drops.
 @export var cooldown := 0.6
 ## How quickly the monster catches up with the pointer (higher = snappier).
@@ -34,28 +32,16 @@ signal next_changed(tier: int)
 @export var aim_line_color := Color(1, 1, 1, 0.35)
 
 @export_group("Spaceship")
-## Your saucer PNG (without its dome). Leave empty to use the drawn UFO.
+## Your spaceship PNG. Leave empty to use the drawn UFO.
 @export var ship_texture: Texture2D = preload("res://assets/ui/alien_ship.png")
-## How wide the saucer appears, in pixels.
-@export var ship_width := 200.0
-## How far above the held monster the middle of the saucer floats.
-@export var ship_height_above := 88.0
+## How wide the ship appears, in pixels.
+@export var ship_width := 224.0
+## How far above the held monster the middle of the ship floats.
+@export var ship_height_above := 98.0
 ## How much the ship leans into its movement (0 = no lean).
 @export var ship_lean := 0.0006
 ## Largest lean in radians (0.15 is about 9 degrees).
 @export var ship_max_lean := 0.15
-
-@export_subgroup("Dome")
-## Dome size as a share of the saucer width: half its width, and its height.
-@export var dome_half_width := 0.3
-@export var dome_height := 0.36
-## Where the dome stands, as a share of the saucer picture's height from the
-## top (the top of the blue ring).
-@export var dome_base := 0.06
-## How big the next monster looks inside the dome (share of the dome width).
-@export var dome_monster_size := 0.5
-@export var dome_glass_color := Color(0.75, 0.9, 1.0, 0.16)
-@export var dome_edge_color := Color(0.45, 0.78, 1.0, 0.95)
 
 @export_subgroup("Colours")
 @export var outline_color := Color(0.12, 0.1, 0.16)
@@ -85,18 +71,11 @@ var _target_x := 360.0
 var _time := 0.0
 var _lean := 0.0
 var _last_x := 0.0
-var _dome_front: Node2D
 
 
 func _ready() -> void:
 	_held = BlinkSprite.new()
 	add_child(_held)
-	# The next monster and the glass edge go on their own layer above the
-	# ship. Godot 4.3's Compatibility renderer draws the monster as a plain
-	# white square if it shares a canvas item with the dome's glass fill.
-	_dome_front = Node2D.new()
-	_dome_front.draw.connect(_draw_dome_front)
-	add_child(_dome_front)
 
 
 ## Called once by main.gd when the game starts.
@@ -160,6 +139,16 @@ func _drop() -> void:
 	_cooldown_left = cooldown
 
 
+## Pauses dropping while a power-up waits for the player to tap a monster
+## (the ship stays where it is and keeps hold of its monster).
+func set_paused(paused: bool) -> void:
+	if _held == null or (paused == not enabled):
+		return
+	enabled = not paused
+	if enabled and _cooldown_left <= 0.0:
+		_held.visible = true
+
+
 func stop() -> void:
 	enabled = false
 	_held.visible = false
@@ -189,13 +178,12 @@ func _draw() -> void:
 	draw_set_transform(Vector2(0, ship_y), _lean, Vector2.ONE)
 	_draw_ship()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	_dome_front.queue_redraw()
 
 
 ## Tractor beam shining down from the ship around the held monster.
 func _draw_beam(ship_y: float, radius: float) -> void:
-	var top_y := ship_y + ship_width * 0.15
-	var top_half := ship_width * 0.15
+	var top_y := ship_y + ship_width * 0.17
+	var top_half := ship_width * 0.13
 	var bottom_y := radius + 14.0
 	var bottom_half := radius + 18.0
 	var left_top := Vector2(-top_half, top_y)
@@ -221,7 +209,9 @@ func _draw_beam(ship_y: float, radius: float) -> void:
 ## The UFO, drawn around (0, 0) = the middle of the saucer.
 func _draw_ship() -> void:
 	if ship_texture:
-		_draw_art_ship()
+		var tex_size := ship_texture.get_size()
+		var draw_size := tex_size * (ship_width / tex_size.x)
+		draw_texture_rect(ship_texture, Rect2(-draw_size / 2.0, draw_size), false)
 		return
 
 	var hw := ship_width / 2.0   # half width of the saucer
@@ -293,58 +283,6 @@ func _draw_ship() -> void:
 	# Twinkling sparkles around the ship.
 	_draw_sparkle(Vector2(-hw - 6.0, -ry * 2.2), 7.0 + sin(_time * 5.0) * 2.0)
 	_draw_sparkle(Vector2(hw + 2.0, -ry * 2.8), 6.0 + sin(_time * 5.0 + 2.0) * 2.0)
-
-
-## vicky's saucer art with a glass dome drawn on top, and the next monster
-## sitting inside the dome on the blue ring. Drawn back to front: back of the
-## glass, saucer, monster (so none of it is hidden behind the ship), then the
-## glass outline and shine over everything.
-func _draw_art_ship() -> void:
-	var tex_size := ship_texture.get_size()
-	var draw_size := tex_size * (ship_width / tex_size.x)
-	var top_left := -draw_size / 2.0
-	var base := Vector2(0, top_left.y + draw_size.y * dome_base)
-	var rx := ship_width * dome_half_width
-	var ry := ship_width * dome_height
-	var dome := _ellipse_points(base, rx, ry, PI, TAU, 32)
-
-	draw_colored_polygon(dome, dome_glass_color)
-	draw_texture_rect(ship_texture, Rect2(top_left, draw_size), false)
-
-
-## Drawn on _dome_front, over the ship: the next monster sitting on the blue
-## ring, then the glass outline and shine over it.
-func _draw_dome_front() -> void:
-	if _jar == null or ship_texture == null:
-		return
-	var layer := _dome_front
-	var ship_y := -ship_height_above + sin(_time * 3.0) * 3.0  # same hover as _draw()
-	layer.draw_set_transform(Vector2(0, ship_y), _lean, Vector2.ONE)
-	var tex_size := ship_texture.get_size()
-	var draw_size := tex_size * (ship_width / tex_size.x)
-	var top_left := -draw_size / 2.0
-	var base := Vector2(0, top_left.y + draw_size.y * dome_base)
-	var rx := ship_width * dome_half_width
-	var ry := ship_width * dome_height
-	var dome := _ellipse_points(base, rx, ry, PI, TAU, 32)
-
-	var next_texture: Texture2D = TierData.get_texture(next_tier) if enabled else null
-	if next_texture:
-		var side := rx * 2.0 * dome_monster_size
-		var fit := next_texture.get_size() * (side / maxf(next_texture.get_width(), next_texture.get_height()))
-		# Feet resting just on the ring, with a gentle bob.
-		var bottom := base.y + draw_size.y * 0.04 + sin(_time * 2.2) * 1.5
-		var rect := Rect2(Vector2(-fit.x / 2.0, bottom - fit.y), fit)
-		layer.draw_texture_rect(next_texture, rect, false)
-
-	# Glass edge: a soft glow, then the crisp blue line.
-	layer.draw_polyline(dome, Color(dome_edge_color, 0.25), 7.0, true)
-	layer.draw_polyline(dome, dome_edge_color, 3.0, true)
-	# Shine, like the highlights on vicky's dome art.
-	layer.draw_arc(base + Vector2(-rx * 0.08, -ry * 0.02), rx * 0.78, deg_to_rad(200), deg_to_rad(245), 12,
-			Color(1, 1, 1, 0.75), 4.0, true)
-	layer.draw_arc(base + Vector2(rx * 0.06, -ry * 0.02), rx * 0.8, deg_to_rad(298), deg_to_rad(318), 8,
-			Color(1, 1, 1, 0.6), 3.0, true)
 
 
 func _draw_alien(center: Vector2, head_r: float) -> void:

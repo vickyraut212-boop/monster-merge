@@ -8,23 +8,23 @@ extends Node
 ##   radius   - collision circle size in pixels. The sprite is scaled so its
 ##              width matches the circle (see get_sprite_scale).
 ##   points   - score for creating this tier by merging
-##   bonus    - extra points on top, for the big tiers (4 to 7)
+##   bonus    - extra points on top, for the big tiers (4 to 8)
 ##
 ## Radii follow the art size chart (docs/size_chart.png). Each monster's width
-## in the chart, relative to the Tier 7 boss:
-##   T1 0.119  T2 0.195  T3 0.289  T4 0.412  T5 0.471  T6 0.658  T7 1.000
+## in the chart, relative to the Tier 8 boss:
+##   T1 0.119  T2 0.195  T3 0.289  T4 0.412  T5 0.471  T6 0.658  T7 0.826  T8 1.000
 ## BOSS_RADIUS sets the overall scale; every other tier keeps its chart ratio.
 ## To make everything bigger or smaller, change BOSS_RADIUS only.
 
 const BOSS_RADIUS := 130.0
 
-const SIZE_CHART_RATIO: Array[float] = [0.119, 0.195, 0.289, 0.412, 0.471, 0.658, 1.0]
+const SIZE_CHART_RATIO: Array[float] = [0.119, 0.195, 0.289, 0.412, 0.471, 0.658, 0.826, 1.0]
 
 ## Readability boost for the smallest tiers. At their pure chart size Tier 1
 ## (about 15 px) and Tier 2 (about 25 px) are too small to read their faces,
 ## and they are the monsters players see most. 1.0 = exact chart size.
-## Result: T1 22, T2 29, T3 38, T4 54, T5 61, T6 86, T7 130 px radius.
-const READABILITY_BOOST: Array[float] = [1.45, 1.15, 1.0, 1.0, 1.0, 1.0, 1.0]
+## Result: T1 22, T2 29, T3 38, T4 54, T5 61, T6 86, T7 107, T8 130 px radius.
+const READABILITY_BOOST: Array[float] = [1.45, 1.15, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
 const TIERS: Array[Dictionary] = [
 	{"name": "Tier 1 - Tiny Dot",  "texture": "res://assets/monsters/tier_1.png", "points": 1,  "bonus": 0},
@@ -33,14 +33,15 @@ const TIERS: Array[Dictionary] = [
 	{"name": "Tier 4",             "texture": "res://assets/monsters/tier_4.png", "points": 10, "bonus": 10},
 	{"name": "Tier 5",             "texture": "res://assets/monsters/tier_5.png", "points": 15, "bonus": 20},
 	{"name": "Tier 6",             "texture": "res://assets/monsters/tier_6.png", "points": 21, "bonus": 30},
-	{"name": "Tier 7 - Big Boss",  "texture": "res://assets/monsters/tier_7.png", "points": 28, "bonus": 50},
+	{"name": "Tier 7 - Slime",     "texture": "res://assets/monsters/tier_7.png", "points": 28, "bonus": 40},
+	{"name": "Tier 8 - Big Boss",  "texture": "res://assets/monsters/tier_8.png", "points": 36, "bonus": 50},
 ]
 
 ## Drops: the first drop is always Tier 1, then random Tier 1 to this tier.
-## Tiers above it (4 to 7) are only made by merging. See dropper.gd.
+## Tiers above it (4 to 8) are only made by merging. See dropper.gd.
 const MAX_DROP_TIER := 3
 
-## Bonus for merging two Tier 7 bosses (they vanish).
+## Bonus for merging two Tier 8 bosses (they vanish).
 const BOSS_MERGE_BONUS := 100
 
 
@@ -79,7 +80,7 @@ func get_bonus(tier: int) -> int:
 	return get_tier(tier)["bonus"]
 
 
-## Tier size compared to the Tier 7 boss (0.119 for Tier 1 ... 1.0 for Tier 7).
+## Tier size compared to the Tier 8 boss (0.119 for Tier 1 ... 1.0 for Tier 8).
 func get_size_ratio(tier: int) -> float:
 	return get_radius(tier) / get_radius(tier_count())
 

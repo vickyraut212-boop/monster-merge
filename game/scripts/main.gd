@@ -5,6 +5,22 @@ extends Node2D
 
 const SAVE_PATH := "user://best_score.cfg"
 
+## COMBO: merges that follow each other within COMBO_WINDOW seconds form a
+## chain (chain reactions in the jar, or a quick drop that merges right after
+## the last one). The chain ends once COMBO_WINDOW passes with no merge.
+const COMBO_WINDOW := 1.5
+## Extra points per chain step: this share of the merge's points for each
+## step past the first (x2 adds half again, x3 a whole extra, ...), and never
+## less than COMBO_MIN_EXTRA per step.
+const COMBO_STEP := 0.5
+const COMBO_MIN_EXTRA := 5
+## Feedback words show this far above the merge, never higher than
+## MESSAGE_TOP (just under the dashed line), and between the jar walls.
+const MESSAGE_LIFT := 90.0
+const MESSAGE_TOP := 575.0
+## Tier bonuses this big or bigger (Tier 6 and up) get a BONUS +N word.
+const BONUS_MESSAGE_MIN := 30
+
 @onready var jar: Jar = $Jar
 @onready var dropper: Dropper = $Dropper
 @onready var monsters: Node2D = $Monsters
@@ -18,6 +34,10 @@ var _shaker: Shaker
 ## had (the server uses these to reject impossible scores).
 var _run_started_ms := 0
 var _drops := 0
+var _power_ups: PowerUps
+## Merges in the current chain, and when the last one happened.
+var _combo := 0
+var _last_merge_ms := -100000
 
 
 func _ready() -> void:
@@ -28,6 +48,7 @@ func _ready() -> void:
 	hud.set_score(0)
 	hud.set_best(best)
 
+	dropper.next_changed.connect(hud.set_next)
 	dropper.dropped.connect(_on_dropped)
 	jar.game_over.connect(_on_game_over)
 	hud.play_again_pressed.connect(_on_play_again)
@@ -37,9 +58,17 @@ func _ready() -> void:
 	dropper.setup(jar)
 	_run_started_ms = Time.get_ticks_msec()
 
-	# Shake the phone (or press SHAKE on PC) to jostle the monsters.
+	# Tap the battery power-up (or shake the phone) to jostle the monsters.
 	_shaker = Shaker.new()
+	_shaker.button = hud.get_power_up_button("battery")
 	add_child(_shaker)
+
+	# All four power-ups and their uses (see power_ups.gd). Added last so it
+	# gets taps before the ship does while it is waiting for a target.
+	_power_ups = PowerUps.new()
+	_power_ups.name = "PowerUps"
+	add_child(_power_ups)
+	_power_ups.setup(monsters, dropper, hud, _shaker, _spawn_monster)
 
 	# Animated opening (logo + monsters jumping in) on first launch only.
 	Intro.play_over(self)
@@ -80,24 +109,31 @@ func _merge(a: Monster, b: Monster) -> void:
 		monsters.remove_child(old)
 		old.queue_free()
 
+	var combo := _count_combo()
+
 	if new_tier > TierData.tier_count():
-		# Two Tier 7 bosses: both vanish for a big bonus.
-		_add_score(TierData.BOSS_MERGE_BONUS)
-		_show_points_popup(midpoint, 0, TierData.BOSS_MERGE_BONUS)
+		# Two Tier 8 bosses: both vanish for a big bonus.
+		var boss_extra := _combo_extra(TierData.BOSS_MERGE_BONUS, combo)
+		_add_score(TierData.BOSS_MERGE_BONUS + boss_extra)
+		_show_feedback(midpoint, TierData.BOSS_MERGE_BONUS + boss_extra, 0, combo, true)
 		GameAudio.play("boss")
 		GameAudio.vibrate(120)
 		return
 
 	var points := TierData.get_points(new_tier)
 	var bonus := TierData.get_bonus(new_tier)
-	_add_score(points + bonus)
-	_show_points_popup(midpoint, points, bonus)
+	var extra := _combo_extra(points, combo)
+	_add_score(points + bonus + extra)
+	_show_feedback(midpoint, points + bonus + extra, bonus, combo, false)
 	# Pop sound: small monsters pop high, big ones pop deeper.
 	var size := float(new_tier - 2) / (TierData.tier_count() - 2)
 	GameAudio.play("pop", lerpf(1.35, 0.7, size))
-	if bonus > 0:
+	if combo >= 2:
+		# Each step of a chain rings a little higher.
+		GameAudio.play("bonus", 1.0 + 0.12 * (mini(combo, 6) - 1))
+	elif bonus > 0:
 		GameAudio.play("bonus")
-	GameAudio.vibrate(20 + new_tier * 5)
+	GameAudio.vibrate(20 + new_tier * 5 + mini(combo - 1, 4) * 10)
 	var merged := _spawn_monster(new_tier, midpoint)
 	merged.linear_velocity = velocity * 0.5
 	merged.pop_in()
@@ -107,53 +143,66 @@ func _add_score(points: int) -> void:
 	score += points
 	hud.set_score(score)
 	hud.set_best(maxi(best, score))
+	_power_ups.on_score(score)
 
 
-## Floating score text where a merge happened: the normal points in small
-## white ("+21"), and any bonus on its own line in bigger gold ("BONUS +30"),
-## so players can tell the two apart. Rises and fades in under a second.
-func _show_points_popup(at: Vector2, points: int, bonus: int) -> void:
-	var popup := Node2D.new()
-	popup.position = at
-	popup.z_index = 10
-	add_child(popup)
-
-	if points > 0:
-		popup.add_child(_popup_label("+%d" % points, 26, Color.WHITE, Vector2(0, -16)))
-	if bonus > 0:
-		var bonus_label := _popup_label("BONUS +%d" % bonus, 36, Color(1, 0.82, 0.3), Vector2(0, 20))
-		popup.add_child(bonus_label)
-		# Little pop so the bonus catches the eye.
-		bonus_label.scale = Vector2(0.6, 0.6)
-		bonus_label.create_tween().tween_property(bonus_label, "scale", Vector2.ONE, 0.2) \
-				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-	var tween := popup.create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(popup, "position:y", at.y - 70.0, 0.8)
-	tween.tween_property(popup, "modulate:a", 0.0, 0.35).set_delay(0.45)
-	tween.chain().tween_callback(popup.queue_free)
+## Adds this merge to the chain (or starts a new one if the last merge was
+## too long ago) and returns its place in the chain: 1, 2, 3...
+func _count_combo() -> int:
+	var now := Time.get_ticks_msec()
+	if now - _last_merge_ms <= COMBO_WINDOW * 1000.0:
+		_combo += 1
+	else:
+		_combo = 1
+	_last_merge_ms = now
+	return _combo
 
 
-func _popup_label(text: String, font_size: int, color: Color, offset: Vector2) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", font_size)
-	label.add_theme_color_override("font_color", color)
-	label.add_theme_color_override("font_outline_color", Color(0.2, 0.1, 0.3))
-	label.add_theme_constant_override("outline_size", 10)
-	label.size = Vector2(260, font_size + 16)
-	label.position = offset - label.size / 2.0
-	label.pivot_offset = label.size / 2.0
-	return label
+## Extra points for a merge at this place in a chain (0 for the first).
+func _combo_extra(points: int, combo: int) -> int:
+	if combo < 2:
+		return 0
+	var steps := combo - 1
+	return maxi(roundi(points * COMBO_STEP * steps), COMBO_MIN_EXTRA * steps)
+
+
+## Feedback for a merge (see reward_text.gd). Only one thing shows:
+## - a special moment gets one short word above the merge, picked from a small
+##   vocabulary: NICE! (2nd merge in a chain), COMBO x3, SUPER! (4th),
+##   WELL DONE! (5th and on, or two bosses vanishing), or BONUS +N for a big
+##   tier bonus (Tier 6 and up) outside a chain;
+## - any other merge just gets its points ("+21", bonus and chain extra
+##   included) at the merge.
+func _show_feedback(at: Vector2, total: int, bonus: int, combo: int, boss: bool) -> void:
+	var text := ""
+	var color := Color.WHITE
+	if boss or combo >= 5:
+		text = "WELL DONE!"
+		color = Color(1.0, 0.72, 0.9)
+	elif combo == 4:
+		text = "SUPER!"
+		color = Color(1.0, 0.8, 0.5)
+	elif combo == 3:
+		text = "COMBO x3"
+		color = Color(0.68, 0.9, 1.0)
+	elif combo == 2:
+		text = "NICE!"
+		color = Color(0.72, 1.0, 0.8)
+	elif bonus >= BONUS_MESSAGE_MIN:
+		text = "BONUS +%d" % bonus
+		color = Color(1.0, 0.86, 0.45)
+	if text == "":
+		RewardText.points(self, at, "+%d" % total)
+		return
+	var walls := jar.get_inner_rect()
+	RewardText.message(self, Vector2(at.x, maxf(at.y - MESSAGE_LIFT, MESSAGE_TOP)), text, color,
+			Vector2(walls.position.x + 10.0, walls.end.x - 10.0))
 
 
 func _on_game_over() -> void:
 	_is_over = true
 	dropper.stop()
-	_shaker.enabled = false
+	_power_ups.stop()
 	GameAudio.play("game_over")
 	GameAudio.vibrate(300)
 	var is_new_best := score > best

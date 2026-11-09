@@ -7,7 +7,8 @@ extends Node
 ## Every sound is made in code as a placeholder. To replace one, drop a file
 ## with the same name into assets/audio/ (WAV or OGG), for example
 ## assets/audio/pop.ogg or assets/audio/music.ogg. It is used automatically.
-## Sound names: pop, drop, click, bonus, boss, game_over, music.
+## Sound names: pop, drop, click, bonus, boss, game_over, music,
+## and for the power-ups: clear, aim, whoosh, boom, upgrade.
 ##
 ## The switches are remembered between games in user://settings.cfg.
 
@@ -154,6 +155,25 @@ func _make_sound(sound: String) -> AudioStreamWAV:
 		"game_over":
 			for i in 3:
 				_mix(samples, _tone([523.0, 415.0, 330.0][i], 0.3, 0.4), int(i * 0.22 * RATE))
+		"clear":
+			# Quick run of little pops, high to low.
+			for i in 5:
+				_mix(samples, _slide(1200.0 - i * 120.0, 400.0, 0.08, 0.5), int(i * 0.045 * RATE))
+		"aim":
+			# Two short beeps: targeting mode is on.
+			_mix(samples, _tone(1320.0, 0.07, 0.3), 0)
+			_mix(samples, _tone(1760.0, 0.09, 0.3), int(0.08 * RATE))
+		"whoosh":
+			# The bomb falling: a whistle sliding down.
+			samples = _slide(1400.0, 500.0, 0.3, 0.25)
+		"boom":
+			# Low thump with a burst of noise.
+			samples = _slide(160.0, 40.0, 0.45, 1.0)
+			_mix(samples, _noise_burst(0.4, 0.6), 0)
+		"upgrade":
+			# Rising "power up" slide with a sparkle on top.
+			samples = _slide(300.0, 1200.0, 0.28, 0.55)
+			_mix(samples, _tone(1568.0, 0.25, 0.25), int(0.2 * RATE))
 		"music":
 			return _make_music()
 	return _to_wav(samples, false)
@@ -191,6 +211,18 @@ func _noise_click(length: float, volume: float) -> PackedFloat32Array:
 	out.resize(n)
 	for i in n:
 		out[i] = randf_range(-1.0, 1.0) * volume * (1.0 - float(i) / n)
+	return out
+
+
+## Rumbly noise that fades out (smoothed so it sounds low, not hissy).
+func _noise_burst(length: float, volume: float) -> PackedFloat32Array:
+	var n := int(length * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var v := 0.0
+	for i in n:
+		v = lerpf(v, randf_range(-1.0, 1.0), 0.15)
+		out[i] = v * volume * 2.0 * pow(1.0 - float(i) / n, 2.0)
 	return out
 
 
