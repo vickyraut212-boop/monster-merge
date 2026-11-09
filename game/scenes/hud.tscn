@@ -1,14 +1,15 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
 [ext_resource type="Texture2D" path="res://assets/ui/scoreboard.png" id="2_scoreboard"]
-[ext_resource type="Texture2D" path="res://assets/ui/evolution_chart.png" id="9_chart"]
-[ext_resource type="Texture2D" path="res://assets/ui/powerup_bar.png" id="10_bar"]
 [ext_resource type="Texture2D" path="res://assets/ui/settings_button.png" id="3_settings_button"]
 [ext_resource type="Texture2D" path="res://assets/ui/settings_popup.png" id="4_settings_popup"]
-[ext_resource type="Texture2D" path="res://assets/ui/powerup_vanish.png" id="5_vanish"]
-[ext_resource type="Texture2D" path="res://assets/ui/powerup_blast.png" id="6_blast"]
+[ext_resource type="Texture2D" path="res://assets/ui/powerup_merge.png" id="5_merge"]
+[ext_resource type="Texture2D" path="res://assets/ui/powerup_bomb.png" id="6_bomb"]
 [ext_resource type="Texture2D" path="res://assets/ui/powerup_upgrade.png" id="7_upgrade"]
+[ext_resource type="Texture2D" path="res://assets/ui/powerup_battery.png" id="8_battery"]
+[ext_resource type="Texture2D" path="res://assets/ui/next_backing.png" id="9_next_backing"]
+[ext_resource type="Script" path="res://scripts/power_up_panel.gd" id="10_panel"]
 [ext_resource type="PackedScene" path="res://scenes/leaderboard.tscn" id="11_leaderboard"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_trophy"]
@@ -23,12 +24,19 @@ corner_radius_top_right = 26
 corner_radius_bottom_right = 26
 corner_radius_bottom_left = 26
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
-bg_color = Color(1, 1, 1, 0.12)
-corner_radius_top_left = 28
-corner_radius_top_right = 28
-corner_radius_bottom_right = 28
-corner_radius_bottom_left = 28
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_next"]
+bg_color = Color(0.22, 0.16, 0.46, 0.72)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.55, 0.45, 0.9, 0.35)
+corner_radius_top_left = 22
+corner_radius_top_right = 22
+corner_radius_bottom_right = 22
+corner_radius_bottom_left = 22
+shadow_color = Color(0.05, 0.02, 0.15, 0.35)
+shadow_size = 8
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_box"]
 bg_color = Color(0.2, 0.16, 0.28, 0.95)
@@ -46,11 +54,11 @@ process_mode = 3
 script = ExtResource("1_hud")
 
 [node name="SettingsButton" type="TextureButton" parent="."]
-offset_left = 20.0
-offset_top = 24.0
-offset_right = 108.0
-offset_bottom = 112.0
-pivot_offset = Vector2(44, 44)
+offset_left = 22.0
+offset_top = 28.0
+offset_right = 114.0
+offset_bottom = 120.0
+pivot_offset = Vector2(46, 46)
 texture_normal = ExtResource("3_settings_button")
 ignore_texture_size = true
 stretch_mode = 5
@@ -69,90 +77,131 @@ theme_override_styles/pressed = SubResource("StyleBoxFlat_trophy")
 text = "TOP"
 
 [node name="ScorePanel" type="TextureRect" parent="."]
-offset_left = 210.0
+offset_left = 190.0
 offset_top = 12.0
-offset_right = 510.0
-offset_bottom = 166.0
+offset_right = 530.0
+offset_bottom = 174.0
 mouse_filter = 2
 texture = ExtResource("2_scoreboard")
 expand_mode = 1
 stretch_mode = 5
 
 [node name="BestLabel" type="Label" parent="ScorePanel"]
-offset_top = 40.0
-offset_right = 300.0
-offset_bottom = 64.0
+offset_top = 44.0
+offset_right = 340.0
+offset_bottom = 70.0
 theme_override_colors/font_color = Color(0.62, 0.38, 0.82, 1)
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 20
 text = "BEST 0"
 horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="ScoreLabel" type="Label" parent="ScorePanel"]
-offset_top = 62.0
-offset_right = 300.0
-offset_bottom = 130.0
+offset_top = 66.0
+offset_right = 340.0
+offset_bottom = 136.0
 theme_override_colors/font_color = Color(0.42, 0.2, 0.6, 1)
 theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
 theme_override_constants/outline_size = 8
-theme_override_font_sizes/font_size = 54
+theme_override_font_sizes/font_size = 58
 text = "0"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="EvolutionChart" type="TextureRect" parent="."]
-offset_left = 572.0
-offset_top = 12.0
-offset_right = 708.0
-offset_bottom = 148.0
+[node name="NextPanel" type="Panel" parent="."]
+offset_left = 566.0
+offset_top = 26.0
+offset_right = 688.0
+offset_bottom = 140.0
 mouse_filter = 2
-texture = ExtResource("9_chart")
+theme_override_styles/panel = SubResource("StyleBoxFlat_next")
+
+[node name="NextLabel" type="Label" parent="NextPanel"]
+offset_top = 4.0
+offset_right = 122.0
+offset_bottom = 34.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0.2, 0.12, 0.4, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 22
+text = "NEXT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="NextBacking" type="TextureRect" parent="NextPanel"]
+offset_left = 19.0
+offset_top = 34.0
+offset_right = 103.0
+offset_bottom = 110.0
+mouse_filter = 2
+texture = ExtResource("9_next_backing")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="PowerUpBar" type="TextureRect" parent="."]
-offset_left = 150.0
-offset_top = 1108.0
-offset_right = 570.0
-offset_bottom = 1226.0
+[node name="NextIcon" type="TextureRect" parent="NextPanel"]
+offset_left = 33.0
+offset_top = 44.0
+offset_right = 89.0
+offset_bottom = 100.0
 mouse_filter = 2
-texture = ExtResource("10_bar")
 expand_mode = 1
+stretch_mode = 5
+
+[node name="PowerUpPanel" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 28.0
+offset_top = 1046.0
+offset_right = 692.0
+offset_bottom = 1240.0
+mouse_filter = 2
+script = ExtResource("10_panel")
 
 [node name="PowerUps" type="Control" parent="."]
 anchors_preset = 0
-offset_top = 1108.0
-offset_right = 720.0
-offset_bottom = 1226.0
+offset_left = 28.0
+offset_top = 1046.0
+offset_right = 692.0
+offset_bottom = 1240.0
 mouse_filter = 2
 
-[node name="Vanish" type="TextureButton" parent="PowerUps"]
-offset_left = 182.0
-offset_top = 14.0
-offset_right = 272.0
-offset_bottom = 104.0
-pivot_offset = Vector2(45, 45)
-texture_normal = ExtResource("5_vanish")
+[node name="Merge" type="TextureButton" parent="PowerUps"]
+offset_left = 43.0
+offset_top = 37.0
+offset_right = 163.0
+offset_bottom = 157.0
+pivot_offset = Vector2(60, 60)
+texture_normal = ExtResource("5_merge")
 ignore_texture_size = true
 stretch_mode = 5
 
-[node name="Blast" type="TextureButton" parent="PowerUps"]
-offset_left = 315.0
-offset_top = 14.0
-offset_right = 405.0
-offset_bottom = 104.0
-pivot_offset = Vector2(45, 45)
-texture_normal = ExtResource("6_blast")
+[node name="Bomb" type="TextureButton" parent="PowerUps"]
+offset_left = 196.0
+offset_top = 37.0
+offset_right = 316.0
+offset_bottom = 157.0
+pivot_offset = Vector2(60, 60)
+texture_normal = ExtResource("6_bomb")
 ignore_texture_size = true
 stretch_mode = 5
 
 [node name="Upgrade" type="TextureButton" parent="PowerUps"]
-offset_left = 448.0
-offset_top = 14.0
-offset_right = 538.0
-offset_bottom = 104.0
-pivot_offset = Vector2(45, 45)
+offset_left = 348.0
+offset_top = 37.0
+offset_right = 468.0
+offset_bottom = 157.0
+pivot_offset = Vector2(60, 60)
 texture_normal = ExtResource("7_upgrade")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="Battery" type="TextureButton" parent="PowerUps"]
+offset_left = 501.0
+offset_top = 37.0
+offset_right = 621.0
+offset_bottom = 157.0
+pivot_offset = Vector2(60, 60)
+texture_normal = ExtResource("8_battery")
 ignore_texture_size = true
 stretch_mode = 5
 
