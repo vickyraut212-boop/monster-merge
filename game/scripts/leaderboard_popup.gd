@@ -76,9 +76,33 @@ const TEX_BACK := preload("res://assets/leaderboard/icon_back.png")
 const TEX_INFO := preload("res://assets/leaderboard/icon_info.png")
 const TEX_EDIT := preload("res://assets/leaderboard/icon_edit.png")
 const TEX_CLOSE := preload("res://assets/leaderboard/icon_close.png")
-## The two monsters peeking out beside the title (the game's own art).
-const TEX_PEEK_LEFT := preload("res://assets/monsters/tier_3.png")
-const TEX_PEEK_RIGHT := preload("res://assets/monsters/tier_7.png")
+## Soft rubbery 3D pieces, rendered by tools/leaderboard_art.py at 2x the
+## size they are shown. RUBBER_PAD is the transparent margin (shadow / glow)
+## each was rendered with, in on-screen pixels.
+const TEX_TILE_BLUE := preload("res://assets/leaderboard/rubber/tile_blue.png")
+const TEX_TILE_LILAC := preload("res://assets/leaderboard/rubber/tile_lilac.png")
+const TEX_TILE_ME := preload("res://assets/leaderboard/rubber/tile_me.png")
+const TEX_SCORE_PILL := preload("res://assets/leaderboard/rubber/score_pill.png")
+const TEX_SCORE_PILL_ME := preload("res://assets/leaderboard/rubber/score_pill_me.png")
+const TEX_SCORE_PILL_CREAM := preload("res://assets/leaderboard/rubber/score_pill_cream.png")
+const TEX_DISC_BLUE := preload("res://assets/leaderboard/rubber/rank_disc_blue.png")
+const TEX_DISC_LILAC := preload("res://assets/leaderboard/rubber/rank_disc_lilac.png")
+const TEX_DISC_ME := preload("res://assets/leaderboard/rubber/rank_disc_me.png")
+const TEX_PLATES: Array[Texture2D] = [
+	preload("res://assets/leaderboard/rubber/plate_pink.png"),
+	preload("res://assets/leaderboard/rubber/plate_purple.png"),
+	preload("res://assets/leaderboard/rubber/plate_orange.png"),
+]
+const TEX_TITLE_BANNER := preload("res://assets/leaderboard/rubber/title_banner.png")
+const TEX_BUTTON_GREEN := preload("res://assets/leaderboard/rubber/button_green.png")
+const TEX_BUTTON_YELLOW := preload("res://assets/leaderboard/rubber/button_yellow.png")
+const TEX_BUTTON_PURPLE := preload("res://assets/leaderboard/rubber/button_purple.png")
+const TEX_FIELD := preload("res://assets/leaderboard/rubber/field.png")
+## Golden aura layers behind the top three.
+const TEX_AURA := preload("res://assets/leaderboard/aura/aura.png")
+const TEX_RAYS := preload("res://assets/leaderboard/aura/rays.png")
+const TEX_SWIRL := preload("res://assets/leaderboard/aura/swirl.png")
+const TEX_SPARKLE := preload("res://assets/leaderboard/aura/sparkle.png")
 
 ## Rounded, chunky fonts (SIL Open Font License, see assets/fonts/).
 const FONT_BODY := preload("res://assets/fonts/Fredoka.ttf")
@@ -91,8 +115,6 @@ const INFO_RECT := Rect2(620, 18, 84, 84)
 const EDIT_RECT := Rect2(628, 108, 70, 70)
 
 const TITLE_RECT := Rect2(184, 60, 352, 100)
-const PEEK_LEFT_RECT := Rect2(84, 50, 128, 128)
-const PEEK_RIGHT_RECT := Rect2(506, 50, 128, 128)
 
 const PANEL_RECT := Rect2(12, 146, 696, 984)
 ## panel.png nine-patch margins (left, top, right, bottom) in its pixels.
@@ -113,8 +135,8 @@ const PODIUM_BLOCKS: Array[Vector4] = [
 	Vector4(491, 683, 78, 193),  # bronze, right
 ]
 const PODIUM_AVATAR: Array[float] = [128.0, 112.0, 112.0]
-## Plate colours on the podium fronts (#1 pink, #2 purple, #3 orange).
-const PLATE_COLORS: Array[Color] = [Color(0.93, 0.27, 0.56), Color(0.5, 0.33, 0.9), Color(0.92, 0.45, 0.24)]
+## Size of the golden aura behind #1, #2 and #3.
+const AURA_SIZE: Array[float] = [390.0, 300.0, 300.0]
 
 const LIST_LEFT := 34.0
 const LIST_RIGHT := 686.0
@@ -122,6 +144,12 @@ const LIST_TOP := 690.0
 const LIST_BOTTOM_WITH_PIN := 1004.0
 const LIST_BOTTOM_NO_PIN := 1112.0
 const ROW_H := 86.0
+## Row content, in the row's own pixels (keep ROW_AVATAR_CENTER on the hollow
+## in the tile art, see socket in tools/leaderboard_art.py).
+const ROW_RANK_CENTER := Vector2(44, 39)
+const ROW_AVATAR_CENTER := Vector2(124, 40)
+const ROW_NAME_X := 186.0
+const ROW_SCORE_SIZE := Vector2(176, 56)
 const ROW_GAP := 10
 
 const PINNED_RECT := Rect2(28, 1016, 664, 96)
@@ -135,13 +163,6 @@ const DARK_TEXT := Color(0.2, 0.1, 0.42)
 const LIGHT_TEXT := Color(1, 1, 1)
 const OUTLINE := Color(0.22, 0.06, 0.45)
 const GOLD_TEXT := Color(1, 0.86, 0.24)
-const CREAM := Color(1, 0.97, 0.88)
-## Row styles: body, rank band, top highlight, bottom edge.
-const ROW_BLUE: Array[Color] = [Color(0.46, 0.73, 1.0), Color(0.31, 0.56, 0.98), Color(0.8, 0.92, 1.0), Color(0.22, 0.4, 0.85)]
-const ROW_LILAC: Array[Color] = [Color(0.72, 0.6, 1.0), Color(0.57, 0.43, 0.94), Color(0.9, 0.85, 1.0), Color(0.42, 0.28, 0.8)]
-const ROW_ME: Array[Color] = [Color(0.5, 0.24, 0.88), Color(0.39, 0.15, 0.76), Color(0.88, 1.0, 0.35), Color(0.88, 1.0, 0.35)]
-const SCORE_PILL := Color(0.45, 0.22, 0.85)
-const SCORE_PILL_ME := Color(0.3, 0.1, 0.62)
 
 enum Tab { TOTAL, DAILY }
 
@@ -160,6 +181,8 @@ var _caption_text: Label
 var _caption_spinner: Control
 
 var _font_bold: FontVariation
+var _places: Array[Dictionary] = []
+var _auras: Array[Control] = []
 var _status: Label
 var _scroll: ScrollContainer
 var _rows: VBoxContainer
@@ -325,7 +348,7 @@ func _render() -> void:
 		var is_me := _is_me(entry)
 		me_shown = me_shown or is_me
 		var row := _make_row(str(i + 1), str(entry.get("display_name", "?")),
-				_fmt(int(entry.get("best_score", 0))), _avatar_for(entry), is_me, i - 3)
+				_fmt(int(entry.get("best_score", 0))), _avatar_for(entry), is_me, i - 3, _row_width())
 		if is_me:
 			# PASS: a tap opens the editor while drags still scroll the list.
 			row.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -387,89 +410,67 @@ func _fill_pinned() -> void:
 	var row := _make_row(str(Backend.my_rank) if on_board else "-",
 			Backend.display_name if Backend.display_name != "" else "You",
 			_fmt(Backend.my_best) if on_board else "-",
-			AVATARS[_my_avatar_index()], true, 0)
-	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+			AVATARS[_my_avatar_index()], true, 0, PINNED_RECT.size.x)
+	row.position = Vector2(0, (PINNED_RECT.size.y - ROW_H) / 2.0)
 	_pinned.add_child(row)
 
 
-## One ranking row: big rank number on a darker band, framed avatar, name and
-## a score pill. Your own row is purple with a glowing edge and a "You" tag.
-## Returns a holder Control so the tag can poke out above the row.
+## One ranking row on a rubber tile: rank number on a rubber disc, framed
+## avatar in the tile's hollow, name, and a score pill. Your own row is the
+## purple tile with a lime glow and a "You" tag. Returns a holder Control
+## (width x ROW_H) so the tag can poke out above the row.
 func _make_row(rank_text: String, player_name: String, score_text: String,
-		avatar_tex: Texture2D, is_me: bool, index: int) -> Control:
-	var colors: Array[Color] = ROW_ME if is_me else (ROW_LILAC if index % 3 == 2 else ROW_BLUE)
+		avatar_tex: Texture2D, is_me: bool, index: int, width: float) -> Control:
 	var holder := Control.new()
-	holder.custom_minimum_size = Vector2(0, ROW_H)
+	holder.custom_minimum_size = Vector2(width, ROW_H)
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lilac := index % 3 == 2
+	var tile_tex: Texture2D = TEX_TILE_ME if is_me else (TEX_TILE_LILAC if lilac else TEX_TILE_BLUE)
+	var pad := 30.0 if is_me else 24.0
+	holder.add_child(_rubber(tile_tex, Rect2(0, 0, width, ROW_H), pad,
+			Vector4((pad + 190) * 2, (pad + 40) * 2, (pad + 60) * 2, (pad + 40) * 2)))
 
-	var row := PanelContainer.new()
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var style := StyleBoxFlat.new()
-	style.bg_color = colors[0]
-	style.border_color = colors[2]
-	style.border_width_top = 3
-	style.border_width_left = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 6
-	if is_me:
-		style.set_border_width_all(4)
-		style.border_width_bottom = 6
-		style.shadow_color = Color(0.85, 1.0, 0.3, 0.55)
-		style.shadow_size = 10
-	style.set_corner_radius_all(int(ROW_H / 2.0))
-	style.content_margin_left = 6
-	style.content_margin_right = 12
-	style.content_margin_top = 4
-	style.content_margin_bottom = 6
-	row.add_theme_stylebox_override("panel", style)
-	holder.add_child(row)
-
-	var line := HBoxContainer.new()
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line.add_theme_constant_override("separation", 12)
-	row.add_child(line)
-
-	# Rank number on a darker rounded band.
-	var band := PanelContainer.new()
-	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	band.custom_minimum_size = Vector2(96, 0)
-	var band_style := StyleBoxFlat.new()
-	band_style.bg_color = colors[1]
-	band_style.set_corner_radius_all(int(ROW_H / 2.0) - 6)
-	band.add_theme_stylebox_override("panel", band_style)
-	var rank := _label(rank_text, 46 if rank_text.length() <= 2 else (36 if rank_text.length() == 3 else 28),
-			LIGHT_TEXT, OUTLINE, 10, FONT_TITLE)
+	var disc_tex: Texture2D = TEX_DISC_ME if is_me else (TEX_DISC_LILAC if lilac else TEX_DISC_BLUE)
+	var disc_rect := Rect2(ROW_RANK_CENTER - Vector2(31, 31), Vector2(62, 62))
+	holder.add_child(_rubber(disc_tex, disc_rect, 10))
+	var rank := _label(rank_text, 36 if rank_text.length() <= 2 else (28 if rank_text.length() == 3 else 22),
+			LIGHT_TEXT, OUTLINE, 9, FONT_TITLE)
 	rank.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rank.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	band.add_child(rank)
-	line.add_child(band)
+	_place(rank, Rect2(disc_rect.position + Vector2(0, -4), disc_rect.size))
+	holder.add_child(rank)
 
-	# Avatar in a white rounded frame.
+	# Avatar in its white rounded frame, sitting in the tile's hollow.
 	var frame := PanelContainer.new()
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var frame_style := StyleBoxFlat.new()
 	frame_style.bg_color = Color(1, 1, 1, 0.35)
 	frame_style.border_color = Color(1, 1, 1)
 	frame_style.set_border_width_all(3)
 	frame_style.set_corner_radius_all(18)
 	frame_style.set_content_margin_all(3)
+	frame_style.shadow_color = Color(0.1, 0.0, 0.3, 0.3)
+	frame_style.shadow_size = 4
+	frame_style.shadow_offset = Vector2(0, 2)
 	frame.add_theme_stylebox_override("panel", frame_style)
 	var avatar := _texture(avatar_tex)
-	avatar.custom_minimum_size = Vector2(62, 62)
+	avatar.custom_minimum_size = Vector2(58, 58)
 	frame.add_child(avatar)
-	line.add_child(frame)
+	_place(frame, Rect2(ROW_AVATAR_CENTER - Vector2(32, 32), Vector2(64, 64)))
+	holder.add_child(frame)
 
+	var score_x := width - ROW_SCORE_SIZE.x - 12.0
 	var name_label := _label(player_name, 30, LIGHT_TEXT if is_me else DARK_TEXT,
-			OUTLINE if is_me else Color(1, 1, 1, 0.0), 6 if is_me else 0)
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			OUTLINE if is_me else Color(1, 1, 1, 0.55), 6 if is_me else 3)
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.clip_text = true
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	line.add_child(name_label)
+	_place(name_label, Rect2(ROW_NAME_X, 0, score_x - ROW_NAME_X - 10, ROW_H - 8))
+	holder.add_child(name_label)
 
-	line.add_child(_score_pill(score_text, SCORE_PILL_ME if is_me else SCORE_PILL, 156, 54, 30))
+	var pill := _score_pill(score_text, ROW_SCORE_SIZE, 30, "me" if is_me else "purple")
+	pill.position = Vector2(score_x, (ROW_H - 8 - ROW_SCORE_SIZE.y) / 2.0)
+	holder.add_child(pill)
 
 	if is_me:
 		var you := _texture(TEX_YOU)
@@ -479,41 +480,35 @@ func _make_row(rank_text: String, player_name: String, score_text: String,
 	return holder
 
 
-## A rounded pill with a star and a score: purple with white text in the
-## list, cream with dark text on the podium.
-func _score_pill(text: String, color: Color, width: float, height: float, font_size: int,
-		light := false) -> PanelContainer:
-	var pill := PanelContainer.new()
+## A rubber score container with a star and the score: purple with white
+## text in the list ("purple" / "me"), cream with dark text on the podium.
+func _score_pill(text: String, size: Vector2, font_size: int, kind: String) -> Control:
+	var pill := Control.new()
 	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pill.custom_minimum_size = Vector2(width, height)
-	pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.border_color = color.lightened(0.35) if not light else Color(1, 1, 1)
-	style.set_border_width_all(2)
-	style.border_width_bottom = 4
-	if light:
-		style.border_color = Color(0.86, 0.72, 0.5)
-	style.set_corner_radius_all(int(height / 2.0))
-	style.content_margin_left = 10
-	style.content_margin_right = 14
-	pill.add_theme_stylebox_override("panel", style)
-	var line := HBoxContainer.new()
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line.add_theme_constant_override("separation", 6)
-	pill.add_child(line)
+	pill.size = size
+	var light := kind == "cream"
+	var tex: Texture2D = TEX_SCORE_PILL_CREAM if light else (TEX_SCORE_PILL_ME if kind == "me" else TEX_SCORE_PILL)
+	var cap := (10.0 + size.y / 2.0) * 2.0
+	var vert := (10.0 + size.y * 0.4) * 2.0
+	pill.add_child(_rubber(tex, Rect2(Vector2.ZERO, size), 10, Vector4(cap, vert, cap, vert)))
+	var star_size := size.y * 0.66
 	var star := _texture(TEX_STAR)
-	star.custom_minimum_size = Vector2(height * 0.66, height * 0.66)
-	star.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	line.add_child(star)
+	_place(star, Rect2(size.y * 0.32, (size.y - star_size) / 2.0 - 2.0, star_size, star_size))
+	pill.add_child(star)
 	var score := _label(text, font_size, DARK_TEXT if light else LIGHT_TEXT,
-			Color(0, 0, 0, 0) if light else OUTLINE, 0 if light else 6, FONT_TITLE)
+			Color(1, 1, 1, 0.6) if light else OUTLINE, 3 if light else 6, FONT_TITLE)
 	score.name = "Score"
-	score.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	score.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	line.add_child(score)
+	var text_x := size.y * 0.32 + star_size
+	_place(score, Rect2(text_x, -3, size.x - text_x - size.y * 0.25, size.y))
+	pill.add_child(score)
 	return pill
+
+
+## Width of a row in the list (the scroll area minus its side margins).
+func _row_width() -> float:
+	return LIST_RIGHT - LIST_LEFT - 12.0
 
 
 func _clear_rows() -> void:
@@ -628,14 +623,6 @@ func _build() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	# Two monsters peek out from behind the panel, beside the title.
-	for pair in [[TEX_PEEK_LEFT, PEEK_LEFT_RECT, -8.0], [TEX_PEEK_RIGHT, PEEK_RIGHT_RECT, 8.0]]:
-		var peek := _texture(pair[0])
-		_place(peek, pair[1])
-		peek.pivot_offset = peek.size / 2.0
-		peek.rotation_degrees = pair[2]
-		add_child(peek)
-
 	var panel := NinePatchRect.new()
 	panel.texture = TEX_PANEL
 	panel.patch_margin_left = PANEL_MARGINS[0]
@@ -646,6 +633,12 @@ func _build() -> void:
 	_place(panel, PANEL_RECT)
 	add_child(panel)
 
+	_places = _podium_places()
+	# The auras go first so the tabs, podium and winners sit in front of them.
+	for place in 3:
+		var aura := _make_aura((_places[place]["avatar"] as Rect2).get_center(), AURA_SIZE[place], place)
+		add_child(aura)
+		_auras.append(aura)
 	_build_header()
 	_build_tabs()
 	_build_podium()
@@ -657,36 +650,15 @@ func _build() -> void:
 
 
 func _build_header() -> void:
-	# "Leaderboard" banner with a crown on top.
-	var banner := Panel.new()
-	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.8, 0.42, 0.95)
-	style.border_color = Color(0.98, 0.82, 1.0)
-	style.set_border_width_all(4)
-	style.border_width_bottom = 10
-	style.set_corner_radius_all(48)
-	style.shadow_color = Color(0.25, 0.05, 0.45, 0.45)
-	style.shadow_size = 8
-	style.shadow_offset = Vector2(0, 5)
-	banner.add_theme_stylebox_override("panel", style)
-	_place(banner, TITLE_RECT)
-	add_child(banner)
-	var inner := Panel.new()
-	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var inner_style := StyleBoxFlat.new()
-	inner_style.bg_color = Color(0.62, 0.24, 0.85)
-	inner_style.set_corner_radius_all(38)
-	inner.add_theme_stylebox_override("panel", inner_style)
-	_place(inner, Rect2(12, 12, TITLE_RECT.size.x - 24, TITLE_RECT.size.y - 30))
-	banner.add_child(inner)
-	var title := _label("Leaderboard", 58, GOLD_TEXT, Color(0.42, 0.1, 0.55), 14, FONT_TITLE)
+	# "Leaderboard" banner (rubber) with a crown on top.
+	add_child(_rubber(TEX_TITLE_BANNER, TITLE_RECT, 16))
+	var title := _label("Leaderboard", 56, GOLD_TEXT, Color(0.42, 0.1, 0.55), 14, FONT_TITLE)
 	title.add_theme_color_override("font_shadow_color", Color(0.3, 0.05, 0.4, 0.8))
 	title.add_theme_constant_override("shadow_offset_y", 5)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_place(title, Rect2(0, -6, TITLE_RECT.size.x, TITLE_RECT.size.y))
-	banner.add_child(title)
+	_place(title, Rect2(TITLE_RECT.position + Vector2(0, -6), TITLE_RECT.size))
+	add_child(title)
 	var crown := _texture(TEX_CROWN)
 	_place(crown, Rect2(TITLE_RECT.get_center().x - 46, TITLE_RECT.position.y - 50, 92, 70))
 	add_child(crown)
@@ -780,10 +752,9 @@ func _pill_texture(tex: Texture2D, rect: Rect2) -> NinePatchRect:
 	return pill
 
 
-func _build_podium() -> void:
+## Where each podium place's block and avatar sit, from podium.png.
+func _podium_places() -> Array[Dictionary]:
 	var k := PODIUM_RECT.size.x / float(TEX_PODIUM.get_width())
-	# Glows go behind the podium so they shine out from behind the winners.
-	var glows: Array[Control] = []
 	var places: Array[Dictionary] = []
 	for place in 3:
 		var block := PODIUM_BLOCKS[place]
@@ -795,33 +766,75 @@ func _build_podium() -> void:
 		var cx := (left + right) / 2.0
 		var avatar_rect := Rect2(cx - size / 2.0, top + 22.0 - size, size, size)
 		places.append({"left": left, "right": right, "top": top, "bottom": bottom, "cx": cx, "avatar": avatar_rect})
+	return places
 
-		var glow_size := size * (2.3 if place == 0 else 1.8)
-		var glow := _texture(_glow_texture(place == 0), TextureRect.STRETCH_SCALE)
-		_place(glow, Rect2(avatar_rect.get_center() - Vector2(glow_size, glow_size) / 2.0, Vector2(glow_size, glow_size)))
-		glow.pivot_offset = glow.size / 2.0
-		add_child(glow)
-		glows.append(glow)
-		# Gentle pulse so the winners stand out.
-		var pulse := glow.create_tween().set_loops()
-		pulse.tween_property(glow, "scale", Vector2(1.08, 1.08), 1.2).set_trans(Tween.TRANS_SINE)
-		pulse.tween_property(glow, "scale", Vector2(0.95, 0.95), 1.2).set_trans(Tween.TRANS_SINE)
 
-	# Sparkles around the winner.
-	var c: Vector2 = (places[0]["avatar"] as Rect2).get_center()
-	for spark in [[Vector2(-92, -40), 22.0], [Vector2(86, -56), 18.0], [Vector2(-70, 46), 14.0], [Vector2(96, 30), 20.0]]:
-		var star := _texture(TEX_STAR)
-		var s: float = spark[1]
-		_place(star, Rect2(c + spark[0] - Vector2(s, s) / 2.0, Vector2(s, s)))
-		star.pivot_offset = star.size / 2.0
-		glows[0].add_sibling(star)
-		var twinkle := star.create_tween().set_loops()
-		twinkle.tween_property(star, "modulate:a", 0.25, 0.9 + s * 0.02)
-		twinkle.tween_property(star, "modulate:a", 1.0, 0.9 + s * 0.02)
+## A radiant golden aura: soft glow, slowly turning light rays, an orbiting
+## swirl of light and floating sparkles. #1 gets the biggest and brightest.
+func _make_aura(center: Vector2, size: float, place: int) -> Control:
+	var root := Control.new()
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# A little above the avatar's centre so the light crowns the winner.
+	root.position = center - Vector2(0, size * 0.06)
+	root.modulate.a = 1.0 if place == 0 else 0.95
+	# Sparkles add light (additive); the glow and rays tint gold.
+	var add := CanvasItemMaterial.new()
+	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 
+	var glow := _texture(TEX_AURA, TextureRect.STRETCH_SCALE)
+	_place(glow, Rect2(-size / 2.0, -size / 2.0, size, size))
+	glow.pivot_offset = glow.size / 2.0
+	root.add_child(glow)
+	var pulse := glow.create_tween().set_loops()
+	pulse.tween_property(glow, "scale", Vector2(1.07, 1.07), 1.6).set_trans(Tween.TRANS_SINE)
+	pulse.tween_property(glow, "scale", Vector2(0.94, 0.94), 1.6).set_trans(Tween.TRANS_SINE)
+
+	# Two ray layers turning opposite ways make the light shimmer.
+	for layer in 2:
+		var rays_size := size * (1.12 if layer == 0 else 0.86)
+		var rays := _texture(TEX_RAYS, TextureRect.STRETCH_SCALE)
+		_place(rays, Rect2(-rays_size / 2.0, -rays_size / 2.0, rays_size, rays_size))
+		rays.pivot_offset = rays.size / 2.0
+		rays.modulate = Color(1, 0.86, 0.45, 1.0 if layer == 0 else 0.6)
+		root.add_child(rays)
+		var turn := rays.create_tween().set_loops()
+		var direction := 1.0 if layer == 0 else -1.0
+		turn.tween_property(rays, "rotation", TAU * direction, 40.0 if layer == 0 else 55.0).from(0.0)
+
+	var swirl := _texture(TEX_SWIRL, TextureRect.STRETCH_SCALE)
+	_place(swirl, Rect2(-size * 0.48, size * 0.04, size * 0.96, size * 0.3))
+	swirl.pivot_offset = swirl.size / 2.0
+	root.add_child(swirl)
+	var shimmer := swirl.create_tween().set_loops()
+	shimmer.tween_property(swirl, "modulate:a", 0.5, 1.4).set_trans(Tween.TRANS_SINE)
+	shimmer.tween_property(swirl, "modulate:a", 1.0, 1.4).set_trans(Tween.TRANS_SINE)
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11 + place
+	for i in (8 if place == 0 else 5):
+		var spark := _texture(TEX_SPARKLE, TextureRect.STRETCH_SCALE)
+		var s := rng.randf_range(16.0, 34.0) * size / 330.0
+		var start := Vector2(rng.randf_range(-0.42, 0.42), rng.randf_range(-0.2, 0.3)) * size
+		_place(spark, Rect2(start - Vector2(s, s) / 2.0, Vector2(s, s)))
+		spark.modulate.a = 0.0
+		spark.material = add
+		root.add_child(spark)
+		var rise := rng.randf_range(0.12, 0.22) * size
+		var time := rng.randf_range(2.2, 3.4)
+		var float_up := spark.create_tween().set_loops()
+		float_up.tween_interval(rng.randf_range(0.0, 2.0))
+		float_up.tween_callback(func() -> void: spark.position = start - Vector2(s, s) / 2.0)
+		float_up.tween_property(spark, "modulate:a", 1.0, time * 0.3)
+		float_up.parallel().tween_property(spark, "position:y", start.y - s / 2.0 - rise, time).set_trans(Tween.TRANS_SINE)
+		float_up.tween_property(spark, "modulate:a", 0.0, time * 0.3)
+	return root
+
+
+func _build_podium() -> void:
 	var podium := _texture(TEX_PODIUM)
 	_place(podium, PODIUM_RECT)
 	add_child(podium)
+	var places := _places
 
 	for place in 3:
 		var p: Dictionary = places[place]
@@ -855,18 +868,7 @@ func _build_podium() -> void:
 		# Coloured plate on the block's front: name + score pill.
 		var plate_top: float = p["top"] + (30.0 if place == 0 else 24.0)
 		var plate_rect := Rect2(p["left"] + 12.0, plate_top, p["right"] - p["left"] - 24.0, p["bottom"] - plate_top - 2.0)
-		var plate := Panel.new()
-		plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var plate_style := StyleBoxFlat.new()
-		plate_style.bg_color = PLATE_COLORS[place]
-		plate_style.border_color = PLATE_COLORS[place].lightened(0.35)
-		plate_style.set_border_width_all(3)
-		plate_style.border_width_bottom = 6
-		plate_style.border_color = PLATE_COLORS[place].lightened(0.35)
-		plate_style.set_corner_radius_all(22)
-		plate.add_theme_stylebox_override("panel", plate_style)
-		_place(plate, plate_rect)
-		add_child(plate)
+		add_child(_rubber(TEX_PLATES[place], plate_rect, 14, Vector4(84, 88, 84, 88)))
 
 		var medal_h := 70.0 if place == 0 else 54.0
 		var medal := _texture(MEDALS[place])
@@ -888,30 +890,13 @@ func _build_podium() -> void:
 
 		var pill_h := 44.0 if place == 0 else 36.0
 		var pill_w := minf(plate_rect.size.x - 24.0, 170.0)
-		var pill := _score_pill("", CREAM, pill_w, pill_h, 30 if place == 0 else 25, true)
-		_place(pill, Rect2(cx - pill_w / 2.0, name_y + (34.0 if place == 0 else 29.0), pill_w, pill_h))
+		var pill := _score_pill("", Vector2(pill_w, pill_h), 30 if place == 0 else 25, "cream")
+		pill.position = Vector2(cx - pill_w / 2.0, name_y + (34.0 if place == 0 else 29.0))
 		add_child(pill)
 		var score: Label = pill.find_child("Score", true, false)
 
 		_podium.append({"avatar": avatar, "empty": empty, "name": name_label, "score": score,
-				"you": you, "button": button, "glow": glows[place]})
-
-
-## Soft radial glow: warm gold behind #1, a lighter lilac behind #2 and #3.
-func _glow_texture(gold: bool) -> GradientTexture2D:
-	var gradient := Gradient.new()
-	var inner := Color(1.0, 0.88, 0.4, 1.0) if gold else Color(0.92, 0.82, 1.0, 0.8)
-	gradient.set_color(0, inner)
-	gradient.set_color(1, Color(inner, 0.0))
-	gradient.add_point(0.45, Color(inner, inner.a * 0.45))
-	var tex := GradientTexture2D.new()
-	tex.gradient = gradient
-	tex.fill = GradientTexture2D.FILL_RADIAL
-	tex.fill_from = Vector2(0.5, 0.5)
-	tex.fill_to = Vector2(0.5, 0.0)
-	tex.width = 256
-	tex.height = 256
-	return tex
+				"you": you, "button": button, "glow": _auras[place]})
 
 
 func _build_list() -> void:
@@ -954,23 +939,11 @@ func _build_play_more() -> void:
 	var button := Button.new()
 	button.tooltip_text = "Play More"
 	button.mouse_default_cursor_shape = CURSOR_POINTING_HAND
-	var green := Color(0.42, 0.84, 0.13)
-	for state in ["normal", "hover", "pressed", "focus"]:
-		var style := StyleBoxFlat.new()
-		style.bg_color = green.lightened(0.06) if state == "hover" else (green.darkened(0.08) if state == "pressed" else green)
-		style.border_color = Color(0.82, 1.0, 0.5)
-		style.set_border_width_all(4)
-		style.border_width_bottom = 10
-		style.set_corner_radius_all(43)
-		style.shadow_color = Color(0.1, 0.35, 0.0, 0.55)
-		style.shadow_size = 6
-		style.shadow_offset = Vector2(0, 4)
-		if state == "focus":
-			style.draw_center = false
-			style.border_color = Color(1, 1, 1, 0.8)
-			style.shadow_size = 0
-		button.add_theme_stylebox_override(state, style)
-	_place(button, PLAY_RECT)
+	button.flat = true
+	button.add_child(_rubber(TEX_BUTTON_GREEN, Rect2(Vector2.ZERO, PLAY_RECT.size), 18))
+	_press_feedback(button)
+	button.size = PLAY_RECT.size
+	button.position = PLAY_RECT.position
 	button.pivot_offset = PLAY_RECT.size / 2.0
 	button.pressed.connect(func() -> void:
 		close()
@@ -1128,10 +1101,19 @@ func _build_editor() -> void:
 	_name_edit.add_theme_color_override("font_color", DARK_TEXT)
 	_name_edit.add_theme_color_override("font_placeholder_color", Color(DARK_TEXT, 0.45))
 	_name_edit.add_theme_color_override("caret_color", DARK_TEXT)
-	_name_edit.add_theme_stylebox_override("normal", _box(Color(0.95, 0.92, 1.0), 22, Color(0.71, 0.6, 0.95), 3, 18))
-	_name_edit.add_theme_stylebox_override("focus", _box(Color(1, 1, 1), 22, Color(1, 0.86, 0.25), 4, 18))
-	_name_edit.add_theme_stylebox_override("read_only", _box(Color(0.95, 0.92, 1.0, 0.6), 22, Color(0.71, 0.6, 0.95), 3, 18))
-	_place(_name_edit, Rect2(56, 642, 528, 72))
+	# The rubber hollow is drawn behind the field; the field itself is clear.
+	var field_rect := Rect2(56, 642, 528, 72)
+	_editor_panel.add_child(_rubber(TEX_FIELD, field_rect, 12))
+	var clear := StyleBoxEmpty.new()
+	clear.content_margin_left = 22
+	clear.content_margin_right = 22
+	clear.content_margin_bottom = 4
+	var focus := _box(Color(0, 0, 0, 0), 26, Color(1, 0.86, 0.25), 3, 22)
+	focus.border_width_bottom = 3
+	_name_edit.add_theme_stylebox_override("normal", clear)
+	_name_edit.add_theme_stylebox_override("read_only", clear)
+	_name_edit.add_theme_stylebox_override("focus", focus)
+	_place(_name_edit, field_rect)
 	_name_edit.text_submitted.connect(func(_text: String) -> void: _on_save_pressed())
 	_editor_panel.add_child(_name_edit)
 
@@ -1141,14 +1123,14 @@ func _build_editor() -> void:
 	_place(_editor_status, Rect2(56, 722, 528, 64))
 	_editor_panel.add_child(_editor_status)
 
-	var cancel := _pill_button("Cancel", Color(0.45, 0.22, 0.85), Color(0.75, 0.6, 1.0), LIGHT_TEXT)
-	_place(cancel, Rect2(56, 800, 240, 86))
+	var cancel := _pill_button("Cancel", TEX_BUTTON_PURPLE, LIGHT_TEXT, Vector2(256, 86))
+	cancel.position = Vector2(56, 800)
 	cancel.pressed.connect(func() -> void:
 		GameAudio.play("click")
 		_close_editor())
 	_editor_panel.add_child(cancel)
-	_save = _pill_button("Save Changes", Color(1, 0.8, 0.15), Color(1, 0.95, 0.6), DARK_TEXT)
-	_place(_save, Rect2(316, 800, 268, 86))
+	_save = _pill_button("Save Changes", TEX_BUTTON_YELLOW, DARK_TEXT, Vector2(268, 86))
+	_save.position = Vector2(326, 800)
 	_save.pressed.connect(_on_save_pressed)
 	_editor_panel.add_child(_save)
 
@@ -1222,20 +1204,56 @@ func _icon_button(tex: Texture2D, rect: Rect2, tip: String, parent: Node = self)
 	return button
 
 
-func _pill_button(text: String, color: Color, edge: Color, font_color: Color) -> Button:
+## A rubber button (purple or yellow) with a centred label.
+func _pill_button(text: String, tex: Texture2D, font_color: Color, size: Vector2) -> Button:
 	var button := Button.new()
-	button.text = text
-	button.add_theme_font_size_override("font_size", 32)
-	button.add_theme_color_override("font_color", font_color)
-	button.add_theme_color_override("font_hover_color", font_color)
-	button.add_theme_color_override("font_pressed_color", font_color)
-	button.add_theme_color_override("font_disabled_color", Color(font_color, 0.5))
-	button.add_theme_stylebox_override("normal", _box(color, 43, edge, 4, 12))
-	button.add_theme_stylebox_override("hover", _box(color.lightened(0.08), 43, edge, 4, 12))
-	button.add_theme_stylebox_override("pressed", _box(color.darkened(0.1), 43, edge, 4, 12))
-	button.add_theme_stylebox_override("disabled", _box(Color(color, 0.5), 43, edge, 4, 12))
-	button.add_theme_stylebox_override("focus", _box(Color(0, 0, 0, 0), 43, Color(1, 1, 1), 3, 12))
+	button.flat = true
+	button.tooltip_text = text
+	button.mouse_default_cursor_shape = CURSOR_POINTING_HAND
+	button.size = size
+	button.add_child(_rubber(tex, Rect2(Vector2.ZERO, size), 16))
+	var label := _label(text, 32, font_color, OUTLINE if font_color == LIGHT_TEXT else Color(1, 1, 1, 0.6),
+			6 if font_color == LIGHT_TEXT else 3)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_place(label, Rect2(0, -5, size.x, size.y))
+	button.add_child(label)
+	_press_feedback(button)
 	return button
+
+
+## Squish a rubber button while it is held down, bounce back on release.
+func _press_feedback(button: BaseButton) -> void:
+	button.button_down.connect(func() -> void:
+		button.pivot_offset = button.size / 2.0
+		button.scale = Vector2(0.94, 0.94))
+	button.button_up.connect(func() -> void:
+		button.create_tween().tween_property(button, "scale", Vector2.ONE, 0.18) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT))
+
+
+## A rubber piece rendered at 2x with `pad` px of shadow/glow around it,
+## drawn so its body fills rect. With margins (in the texture's pixels) it
+## stretches as a nine-patch, so the rounded ends keep their shape.
+func _rubber(tex: Texture2D, rect: Rect2, pad: float, margins := Vector4.ZERO) -> Control:
+	var area := rect.grow(pad)
+	if margins == Vector4.ZERO:
+		var plain := _texture(tex, TextureRect.STRETCH_SCALE)
+		_place(plain, area)
+		return plain
+	# A nine-patch draws its corners at texture size, so draw it at 2x and
+	# scale the node down by half to get crisp, correctly sized corners.
+	var patch := NinePatchRect.new()
+	patch.texture = tex
+	patch.patch_margin_left = int(margins.x)
+	patch.patch_margin_top = int(margins.y)
+	patch.patch_margin_right = int(margins.z)
+	patch.patch_margin_bottom = int(margins.w)
+	patch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	patch.position = area.position
+	patch.size = area.size * 2.0
+	patch.scale = Vector2(0.5, 0.5)
+	return patch
 
 
 func _box(color: Color, radius: int, edge: Color, edge_w: int, margin: float) -> StyleBoxFlat:
