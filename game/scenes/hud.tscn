@@ -11,6 +11,7 @@
 [ext_resource type="Texture2D" path="res://assets/ui/next_backing.png" id="9_next_backing"]
 [ext_resource type="Script" path="res://scripts/power_up_panel.gd" id="10_panel"]
 [ext_resource type="PackedScene" path="res://scenes/leaderboard.tscn" id="11_leaderboard"]
+[ext_resource type="Script" path="res://scripts/game_over_panel.gd" id="12_game_over"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_trophy"]
 bg_color = Color(0.36, 0.26, 0.52, 0.95)
@@ -37,17 +38,6 @@ corner_radius_bottom_right = 22
 corner_radius_bottom_left = 22
 shadow_color = Color(0.05, 0.02, 0.15, 0.35)
 shadow_size = 8
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_box"]
-bg_color = Color(0.2, 0.16, 0.28, 0.95)
-corner_radius_top_left = 32
-corner_radius_top_right = 32
-corner_radius_bottom_right = 32
-corner_radius_bottom_left = 32
-content_margin_left = 32.0
-content_margin_top = 32.0
-content_margin_right = 32.0
-content_margin_bottom = 32.0
 
 [node name="HUD" type="CanvasLayer"]
 process_mode = 3
@@ -209,57 +199,7 @@ stretch_mode = 5
 visible = false
 anchor_right = 1.0
 anchor_bottom = 1.0
-
-[node name="Dim" type="ColorRect" parent="GameOver"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-color = Color(0, 0, 0, 0.6)
-
-[node name="Box" type="VBoxContainer" parent="GameOver"]
-offset_left = 140.0
-offset_top = 370.0
-offset_right = 580.0
-offset_bottom = 910.0
-theme_override_constants/separation = 24
-alignment = 1
-
-[node name="Title" type="Label" parent="GameOver/Box"]
-theme_override_colors/font_color = Color(1, 0.45, 0.5, 1)
-theme_override_colors/font_outline_color = Color(0.2, 0.1, 0.3, 1)
-theme_override_constants/outline_size = 12
-theme_override_font_sizes/font_size = 64
-text = "GAME OVER"
-horizontal_alignment = 1
-
-[node name="FinalScore" type="Label" parent="GameOver/Box"]
-theme_override_font_sizes/font_size = 40
-text = "Score: 0"
-horizontal_alignment = 1
-
-[node name="FinalBest" type="Label" parent="GameOver/Box"]
-theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
-theme_override_font_sizes/font_size = 32
-text = "Best: 0"
-horizontal_alignment = 1
-
-[node name="RankLabel" type="Label" parent="GameOver/Box"]
-theme_override_colors/font_color = Color(1, 1, 1, 0.8)
-theme_override_font_sizes/font_size = 28
-horizontal_alignment = 1
-autowrap_mode = 3
-
-[node name="PlayAgain" type="Button" parent="GameOver/Box"]
-custom_minimum_size = Vector2(0, 88)
-theme_override_font_sizes/font_size = 36
-theme_override_styles/normal = SubResource("StyleBoxFlat_box")
-text = "Play again"
-
-[node name="LeaderboardButton" type="Button" parent="GameOver/Box"]
-custom_minimum_size = Vector2(0, 72)
-theme_override_colors/font_color = Color(1, 0.82, 0.3, 1)
-theme_override_font_sizes/font_size = 30
-theme_override_styles/normal = SubResource("StyleBoxFlat_box")
-text = "Leaderboard"
+script = ExtResource("12_game_over")
 
 [node name="SettingsPopup" type="Control" parent="."]
 visible = false
