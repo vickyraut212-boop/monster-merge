@@ -19,11 +19,16 @@ extends CanvasLayer
 ## (anchors), so they stay lined up if the picture is resized. To adjust one,
 ## select it under SettingsPopup/Panel and drag its anchors in the editor.
 ##
+## GAME OVER
+## The game-over screen is GameOver (game_over_panel.gd), built in code in the
+## leaderboard's style. main.gd reports how the score upload is going with
+## set_rank_state(); the HUD passes it to the game-over screen and tells the
+## leaderboard, which refreshes itself once the new score has landed.
+##
 ## LEADERBOARD
 ## The "TOP" button under the settings button and the Leaderboard button on
-## the game-over panel both open the online leaderboard pop-up (Leaderboard,
-## scenes/leaderboard.tscn). The game-over panel's RankLabel shows the
-## player's world rank once main.gd hears back from the server.
+## the game-over screen both open the online leaderboard pop-up (Leaderboard,
+## scenes/leaderboard.tscn).
 ## The TOP button is a plain placeholder button; give it art later by swapping
 ## it for a TextureButton with the same name.
 
@@ -48,23 +53,14 @@ signal power_up_pressed(power_up: String)
 @onready var _power_ups: Control = $PowerUps
 @onready var _score_label: Label = $ScorePanel/ScoreLabel
 @onready var _best_label: Label = $ScorePanel/BestLabel
-@onready var _game_over: Control = $GameOver
-@onready var _final_score_label: Label = $GameOver/Box/FinalScore
-@onready var _final_best_label: Label = $GameOver/Box/FinalBest
-@onready var _play_again_button: Button = $GameOver/Box/PlayAgain
-@onready var _rank_label: Label = $GameOver/Box/RankLabel
-@onready var _leaderboard_button: Button = $GameOver/Box/LeaderboardButton
+@onready var _game_over: GameOverPanel = $GameOver
 @onready var _trophy_button: Button = $TrophyButton
 @onready var _leaderboard: LeaderboardPopup = $Leaderboard
 
 
 func _ready() -> void:
-	_game_over.visible = false
-	_play_again_button.pressed.connect(func() -> void: play_again_pressed.emit())
-	set_rank_text("")
-	_leaderboard_button.pressed.connect(func() -> void:
-		GameAudio.play("click")
-		_leaderboard.open())
+	_game_over.play_again_pressed.connect(func() -> void: play_again_pressed.emit())
+	_game_over.leaderboard_pressed.connect(_leaderboard.open)
 	_trophy_button.pressed.connect(func() -> void:
 		_bounce(_trophy_button)
 		_leaderboard.open())
@@ -266,14 +262,17 @@ func set_next(tier: int) -> void:
 
 
 func show_game_over(score: int, best: int, is_new_best: bool) -> void:
-	_final_score_label.text = "Score: %d" % score
-	_final_best_label.text = ("New best!" if is_new_best else "Best: %d" % best)
-	_game_over.visible = true
-	_trophy_button.visible = false  # the game-over panel has its own button
+	_game_over.show_result(score, best, is_new_best)
+	_trophy_button.visible = false  # the game-over screen has its own button
 
 
-## Online status line on the game-over panel ("World rank #12 of 340",
-## "Offline - ...", or "" to hide it).
-func set_rank_text(text: String) -> void:
-	_rank_label.text = text
-	_rank_label.visible = text != ""
+## Best score on the game-over screen (e.g. when the server knows a higher one).
+func set_game_over_best(best: int) -> void:
+	_game_over.set_best(best)
+
+
+## How the score upload is going (see GameOverPanel.RankState). While it is
+## PENDING the leaderboard shows "updating" and reloads once it lands.
+func set_rank_state(state: GameOverPanel.RankState, rank := 0, total := 0) -> void:
+	_game_over.set_rank_state(state, rank, total)
+	_leaderboard.set_score_pending(state == GameOverPanel.RankState.PENDING)

@@ -14,7 +14,7 @@ Monorepo: `game/` is the Godot project, `supabase/` is the backend (config, migr
 - `Jar` (`jar.gd`) – walls, floor and the danger line; emits `game_over` when a monster stays above the line for 2 s.
 - `Dropper` (`dropper.gd`) – the alien ship; aims, emits `dropped(tier, position)`, and owns the drop-order rule (first drop is Tier 1, then random up to `TierData.MAX_DROP_TIER`).
 - `Monsters` node – container for spawned `Monster` bodies (`monster.gd`, created in code via `Monster.new()` + `setup(tier)`, not from a scene).
-- `HUD` (`hud.gd`, `scenes/hud.tscn`) – score/best, Next box, settings pop-up, the four power-up buttons with their use-count bubbles, leaderboard buttons, game-over panel; communicates via signals (`play_again_pressed`, `restart_pressed`, `power_up_pressed`).
+- `HUD` (`hud.gd`, `scenes/hud.tscn`) – score/best, Next box, settings pop-up, the four power-up buttons with their use-count bubbles, leaderboard buttons, and the game-over screen (`GameOver`, `game_over_panel.gd`, built in code in the leaderboard's style; on game over `main.gd` freezes the monsters, adds a glow layer behind them and submits the score in the background, and the HUD tells the leaderboard to reload once the score lands); communicates via signals (`play_again_pressed`, `restart_pressed`, `power_up_pressed`).
 
 `main.gd` also creates two nodes in code: `Shaker` (`shaker.gd`, triggered by the Battery button or a phone shake) and `PowerUps` (`power_ups.gd`: Merge clears Tier 1-2, Bomb and Upgrade use tap targeting, limited uses with +1 every 500 points). Power-ups award no points directly.
 

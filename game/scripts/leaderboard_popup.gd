@@ -26,6 +26,13 @@ extends Control
 ## tweak those constants to move things. All positions are in the 720x1280
 ## viewport.
 ##
+## FROM GAME OVER
+## The game-over screen's Leaderboard button opens this board straight away,
+## even while the new score is still being sent. Until it lands
+## (set_score_pending(false), from the HUD) the line under Play More says
+## "Updating your rank..." with a spinner; then the board reloads by itself.
+## Each time the board loads, it scrolls to your row so you see where you are.
+##
 ## AVATARS
 ## The backend has no avatar field yet, so the chosen avatar is saved on this
 ## device (user://profile.cfg) and only you see it. Other players get a
@@ -145,6 +152,12 @@ var _loaded_ok := false
 var _loading := false
 var _my_avatar := -1
 var _press_scroll := 0
+## A just-finished game's score is still on its way to the server.
+var _score_pending := false
+## Scroll to the player's row whenever the list is drawn (while open).
+var _focus_me := false
+var _caption_text: Label
+var _caption_spinner: Control
 
 var _font_bold: FontVariation
 var _status: Label
@@ -185,6 +198,8 @@ func open() -> void:
 	_select_tab(Tab.TOTAL, false)
 	_entries = []
 	_loaded_ok = false
+	_focus_me = true
+	_update_caption()
 	if Backend.is_configured():
 		_loading = true
 		# Ask the server who this player is (new players get a random name).
@@ -193,6 +208,34 @@ func open() -> void:
 	else:
 		_loading = false
 	_render()
+
+
+## Reloads the board in place (the current rows stay until the new ones come).
+func refresh() -> void:
+	if not visible or not Backend.is_configured():
+		return
+	_focus_me = true
+	Backend.fetch_me()
+	Backend.fetch_top(TOP_LIMIT)
+
+
+## Called by the HUD while a finished game's score is being sent. When it
+## lands, an open board reloads so it shows the new score and rank.
+func set_score_pending(pending: bool) -> void:
+	var landed := _score_pending and not pending
+	_score_pending = pending
+	_update_caption()
+	if landed:
+		refresh()
+
+
+## The line under Play More: a spinner and "Updating your rank..." while a
+## score is on its way, the usual tip otherwise.
+func _update_caption() -> void:
+	if _caption_text == null:
+		return
+	_caption_text.text = "Updating your rank..." if _score_pending else "Finish a game to climb the leaderboard!"
+	_caption_spinner.visible = _score_pending
 
 
 func close() -> void:
@@ -276,6 +319,7 @@ func _render() -> void:
 		var entry: Dictionary = list[place] if place < list.size() else {}
 		me_shown = _fill_podium(place, entry) or me_shown
 
+	var my_row: Control = null
 	for i in range(3, list.size()):
 		var entry: Dictionary = list[i]
 		var is_me := _is_me(entry)
@@ -288,8 +332,11 @@ func _render() -> void:
 			row.mouse_default_cursor_shape = CURSOR_POINTING_HAND
 			row.tooltip_text = "Edit your profile"
 			row.gui_input.connect(_on_my_row_input)
+			my_row = row
 		_rows.add_child(row)
 	_scroll.scroll_vertical = 0
+	if _focus_me and my_row != null:
+		_scroll_to_row.call_deferred(my_row)
 
 	_status.visible = true
 	if _tab == Tab.DAILY:
@@ -960,15 +1007,56 @@ func _build_play_more() -> void:
 	caption.add_theme_constant_override("separation", 10)
 	_place(caption, Rect2(0, CAPTION_Y, 720, 40))
 	add_child(caption)
-	for part in [TEX_LAUREL_L, "Finish a game to climb the leaderboard!", TEX_LAUREL_R]:
+	for part in [TEX_LAUREL_L, "spinner", "text", TEX_LAUREL_R]:
 		if part is Texture2D:
 			var laurel := _texture(part)
 			laurel.custom_minimum_size = Vector2(22, 36)
 			caption.add_child(laurel)
+		elif part == "spinner":
+			_caption_spinner = _make_spinner(28.0)
+			caption.add_child(_caption_spinner)
 		else:
-			var label := _label(part, 24, LIGHT_TEXT, OUTLINE, 6)
-			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			caption.add_child(label)
+			_caption_text = _label("", 24, LIGHT_TEXT, OUTLINE, 6)
+			_caption_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			caption.add_child(_caption_text)
+	_update_caption()
+
+
+## A small spinning ring ("updating").
+func _make_spinner(size: float) -> Control:
+	var spinner := Control.new()
+	spinner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spinner.custom_minimum_size = Vector2(size, size)
+	spinner.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	spinner.pivot_offset = Vector2(size, size) / 2.0
+	spinner.draw.connect(func() -> void:
+		var c := spinner.size / 2.0
+		spinner.draw_arc(c, size * 0.38, 0.0, TAU, 32, Color(1, 1, 1, 0.25), 4.0, true)
+		spinner.draw_arc(c, size * 0.38, 0.0, TAU * 0.3, 16, GOLD_TEXT, 4.0, true))
+	var spin := spinner.create_tween().set_loops()
+	spin.tween_property(spinner, "rotation", TAU, 0.8).from(0.0)
+	return spinner
+
+
+## Scrolls the list so the player's row sits in the middle, then gives it a
+## little bounce so the eye finds it.
+func _scroll_to_row(row: Control) -> void:
+	if not is_instance_valid(row) or not visible:
+		return
+	# Wait one frame so the list has laid out its rows.
+	await get_tree().process_frame
+	if not is_instance_valid(row):
+		return
+	var row_y := row.position.y + _rows.position.y
+	var target := int(row_y + row.size.y / 2.0 - _scroll.size.y / 2.0)
+	var bar := _scroll.get_v_scroll_bar()
+	target = clampi(target, 0, maxi(0, int(bar.max_value - bar.page)))
+	var tween := _scroll.create_tween()
+	tween.tween_property(_scroll, "scroll_vertical", target, 0.45) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	row.pivot_offset = row.size / 2.0
+	tween.tween_property(row, "scale", Vector2(1.05, 1.05), 0.12)
+	tween.tween_property(row, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _build_info() -> void:
