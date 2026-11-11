@@ -20,6 +20,11 @@ const MESSAGE_LIFT := 90.0
 const MESSAGE_TOP := 575.0
 ## Tier bonuses this big or bigger (Tier 6 and up) get a BONUS +N word.
 const BONUS_MESSAGE_MIN := 30
+## Game over glow behind each monster: its size (times the monster's radius)
+## and colours.
+const GLOW_SIZE := 3.6
+const GLOW_GOLD := Color(1.0, 0.8, 0.3, 1.0)
+const GLOW_PURPLE := Color(0.74, 0.45, 1.0, 0.9)
 
 @onready var jar: Jar = $Jar
 @onready var dropper: Dropper = $Dropper
@@ -209,17 +214,69 @@ func _on_game_over() -> void:
 	if is_new_best:
 		best = score
 		_save_best(best)
+	_freeze_monsters()
 	hud.show_game_over(score, best, is_new_best)
 	_submit_score()
 
 
-## Sends the run to the online leaderboard. The answer arrives later in
-## _on_score_submitted; the game never waits for it.
+## Game over: every monster stops where it is, and a soft purple and gold glow
+## fades in behind each one (on a layer drawn just before the Monsters node,
+## so the glow never covers a monster).
+func _freeze_monsters() -> void:
+	var glow_layer := Node2D.new()
+	glow_layer.name = "GameOverGlow"
+	add_child(glow_layer)
+	move_child(glow_layer, monsters.get_index())
+	var glow := _glow_texture()
+	var biggest := 0
+	for child in monsters.get_children():
+		if child is Monster:
+			biggest = maxi(biggest, (child as Monster).tier)
+	for child in monsters.get_children():
+		if not child is Monster:
+			continue
+		var monster := child as Monster
+		# Physics settings can't change in the middle of a physics step.
+		monster.set_deferred("freeze", true)
+		var sprite := Sprite2D.new()
+		sprite.texture = glow
+		sprite.position = monster.position
+		var size := TierData.get_radius(monster.tier) * GLOW_SIZE
+		sprite.scale = Vector2.ONE * size / glow.get_width()
+		# The biggest monsters glow gold, the rest purple.
+		sprite.modulate = GLOW_GOLD if monster.tier >= biggest - 1 else GLOW_PURPLE
+		glow_layer.add_child(sprite)
+	glow_layer.modulate.a = 0.0
+	var tween := glow_layer.create_tween()
+	tween.tween_property(glow_layer, "modulate:a", 1.0, 0.6)
+	for sprite in glow_layer.get_children():
+		var s := sprite as Sprite2D
+		var breathe := s.create_tween().set_loops()
+		breathe.tween_property(s, "scale", s.scale * 1.08, 1.3).set_trans(Tween.TRANS_SINE)
+		breathe.tween_property(s, "scale", s.scale, 1.3).set_trans(Tween.TRANS_SINE)
+
+
+func _glow_texture() -> GradientTexture2D:
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	gradient.colors = PackedColorArray([Color(1, 1, 1, 0.9), Color(1, 1, 1, 0.4), Color(1, 1, 1, 0.0)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = gradient
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 0.0)
+	tex.width = 256
+	tex.height = 256
+	return tex
+
+
+## Sends the run to the online leaderboard straight away, in the background.
+## The answer arrives later in _on_score_submitted; the game never waits.
 func _submit_score() -> void:
 	if not Backend.is_configured() or score <= 0:
-		hud.set_rank_text("")
+		hud.set_rank_state(GameOverPanel.RankState.NONE)
 		return
-	hud.set_rank_text("Sending score...")
+	hud.set_rank_state(GameOverPanel.RankState.PENDING)
 	Backend.submit_score(score, Time.get_ticks_msec() - _run_started_ms, _drops)
 
 
@@ -227,13 +284,16 @@ func _on_score_submitted(result: Dictionary) -> void:
 	if not _is_over:
 		return
 	if result.has("error"):
-		hud.set_rank_text("Score not accepted online")
+		hud.set_rank_state(GameOverPanel.RankState.REJECTED)
 	elif result.is_empty():
-		hud.set_rank_text("Offline - score will be sent later")
+		hud.set_rank_state(GameOverPanel.RankState.QUEUED)
 	elif result.get("rank") != null:
-		hud.set_rank_text("World rank #%d of %d" % [int(result["rank"]), int(result["total_players"])])
+		hud.set_rank_state(GameOverPanel.RankState.RANKED,
+				int(result["rank"]), int(result.get("total_players", 0)))
 	else:
-		hud.set_rank_text("")
+		hud.set_rank_state(GameOverPanel.RankState.NONE)
+	if result.has("best_score"):
+		hud.set_game_over_best(maxi(best, int(result["best_score"])))
 
 
 func _on_play_again() -> void:
