@@ -68,6 +68,11 @@ func _ready() -> void:
 	_trophy_button.pressed.connect(func() -> void:
 		_bounce(_trophy_button)
 		_leaderboard.open())
+	# Play More on the leaderboard: from the game-over panel it starts a new
+	# game; during a game the board just closes and play carries on.
+	_leaderboard.play_more_pressed.connect(func() -> void:
+		if _game_over.visible:
+			play_again_pressed.emit())
 	_settings_popup.visible = false
 	_settings_button.pressed.connect(func() -> void:
 		_bounce(_settings_button)

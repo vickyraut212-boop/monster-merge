@@ -5,18 +5,22 @@ extends Control
 ## while open, like the settings pop-up. Data comes from the Backend autoload;
 ## this file only draws it (no backend, ranking or score rules live here).
 ##
-## LAYOUT (vicky's approved compact wireframe, art in assets/leaderboard/)
-## - Header: back button (closes), Monster Merge logo, edit-profile and info
-##   buttons.
-## - Podium: #2 left, #1 centre (tallest), #3 right. Each place shows the
-##   player's avatar, crown, name and score.
-## - Tabs: Total Ranking / Daily Ranking.
-## - List: rank #4 and down, scrolls between the tabs and the pinned row.
-## - Pinned "YOU" row: the current player's rank, pinned at the bottom. When
+## LAYOUT (vicky's reference image, art in assets/leaderboard/)
+## - Header: back button (closes), "Leaderboard" title banner with a crown and
+##   two monsters peeking out, info and edit-profile buttons.
+## - Tabs: Total Ranking / Daily Ranking, on the top edge of the panel.
+## - Podium: #2 left, #1 centre (tallest, crowned, glowing), #3 right. Each
+##   place has a medal, and a coloured plate with the name and a score pill.
+## - List: rank #4 and down, as glossy coloured rows with a big rank number,
+##   framed avatar, name and score pill. Scrolls above the pinned row.
+## - Pinned "You" row: the current player's rank, pinned under the list. When
 ##   the player is already on the podium or in the list, that entry is
 ##   highlighted instead and the pinned row is hidden (never shown twice).
+## - Play More button (closes the board; starts a new game from game over)
+##   and the "Finish a game to climb the leaderboard!" line.
 ## - Profile editor: opened from the edit button, the pinned row, or your own
-##   highlighted row. Choose one of the seven avatars and change your name.
+##   highlighted row/podium spot. Choose one of the seven avatars and change
+##   your name.
 ##
 ## The whole screen is built in code from the rectangles and sizes below, so
 ## tweak those constants to move things. All positions are in the 720x1280
@@ -27,6 +31,10 @@ extends Control
 ## device (user://profile.cfg) and only you see it. Other players get a
 ## stable avatar picked from their player id. Daily Ranking needs a daily
 ## board on the server, which doesn't exist yet, so that tab says so.
+
+## Play More was pressed (the board has already closed itself). The HUD
+## starts a new game when the game-over panel is showing.
+signal play_more_pressed
 
 const TOP_LIMIT := 100
 const NAME_MIN := 3
@@ -42,91 +50,91 @@ const AVATARS: Array[Texture2D] = [
 	preload("res://assets/leaderboard/avatar_6.png"),
 	preload("res://assets/leaderboard/avatar_7.png"),
 ]
-const CROWNS: Array[Texture2D] = [
-	preload("res://assets/leaderboard/crown_1.png"),
-	preload("res://assets/leaderboard/crown_2.png"),
-	preload("res://assets/leaderboard/crown_3.png"),
-]
-## Round number badges for ranks 4-10. Ranks past 10 get a drawn circle.
-const RANK_BADGES: Array[Texture2D] = [
-	preload("res://assets/leaderboard/rank_4.png"),
-	preload("res://assets/leaderboard/rank_5.png"),
-	preload("res://assets/leaderboard/rank_6.png"),
-	preload("res://assets/leaderboard/rank_7.png"),
-	preload("res://assets/leaderboard/rank_8.png"),
-	preload("res://assets/leaderboard/rank_9.png"),
-	preload("res://assets/leaderboard/rank_10.png"),
+const MEDALS: Array[Texture2D] = [
+	preload("res://assets/leaderboard/medal_1.png"),
+	preload("res://assets/leaderboard/medal_2.png"),
+	preload("res://assets/leaderboard/medal_3.png"),
 ]
 const TEX_BACKGROUND := preload("res://assets/leaderboard/background.jpg")
-const TEX_LOGO := preload("res://assets/leaderboard/logo.png")
 const TEX_PANEL := preload("res://assets/leaderboard/panel.png")
 const TEX_PODIUM := preload("res://assets/leaderboard/podium.png")
-const TEX_PINNED := preload("res://assets/leaderboard/pinned_row.png")
-const TEX_TAB_ON := preload("res://assets/leaderboard/tab_selected.png")
-const TEX_TAB_OFF := preload("res://assets/leaderboard/tab_unselected.png")
+const TEX_TAB_ON := preload("res://assets/leaderboard/tab_on_small.png")
+const TEX_TAB_OFF := preload("res://assets/leaderboard/tab_off_small.png")
+const TEX_CROWN := preload("res://assets/leaderboard/crown_1.png")
 const TEX_STAR := preload("res://assets/leaderboard/star.png")
 const TEX_YOU := preload("res://assets/leaderboard/you_bubble.png")
-const TEX_TROPHY := preload("res://assets/leaderboard/trophy.png")
+const TEX_LAUREL_L := preload("res://assets/leaderboard/laurel_left.png")
+const TEX_LAUREL_R := preload("res://assets/leaderboard/laurel_right.png")
 const TEX_BACK := preload("res://assets/leaderboard/icon_back.png")
 const TEX_INFO := preload("res://assets/leaderboard/icon_info.png")
 const TEX_EDIT := preload("res://assets/leaderboard/icon_edit.png")
 const TEX_CLOSE := preload("res://assets/leaderboard/icon_close.png")
+## The two monsters peeking out beside the title (the game's own art).
+const TEX_PEEK_LEFT := preload("res://assets/monsters/tier_3.png")
+const TEX_PEEK_RIGHT := preload("res://assets/monsters/tier_7.png")
+
+## Rounded, chunky fonts (SIL Open Font License, see assets/fonts/).
+const FONT_BODY := preload("res://assets/fonts/Fredoka.ttf")
+const FONT_TITLE := preload("res://assets/fonts/LilitaOne-Regular.ttf")
 
 # --- Layout -----------------------------------------------------------------
 
-const HEADER_BUTTON := 84.0
-const BACK_POS := Vector2(22, 26)
-const EDIT_POS := Vector2(526, 26)
-const INFO_POS := Vector2(614, 26)
-const LOGO_RECT := Rect2(228, 6, 264, 187)
+const BACK_RECT := Rect2(16, 18, 84, 84)
+const INFO_RECT := Rect2(620, 18, 84, 84)
+const EDIT_RECT := Rect2(628, 108, 70, 70)
 
-## Where podium.png is drawn. The PODIUM_* rectangles below are in the
-## picture's own pixels (720x240) and get scaled into this rectangle.
-const PODIUM_RECT := Rect2(30, 352, 660, 220)
+const TITLE_RECT := Rect2(184, 60, 352, 100)
+const PEEK_LEFT_RECT := Rect2(84, 50, 128, 128)
+const PEEK_RIGHT_RECT := Rect2(506, 50, 128, 128)
+
+const PANEL_RECT := Rect2(12, 146, 696, 984)
+## panel.png nine-patch margins (left, top, right, bottom) in its pixels.
+const PANEL_MARGINS := [56, 124, 56, 48]
+
+const TAB_Y := 236.0
+const TAB_H := 76.0
+const TAB_RECTS: Array[Rect2] = [Rect2(40, TAB_Y, 316, TAB_H), Rect2(364, TAB_Y, 316, TAB_H)]
+
+## Where podium.png is drawn. The PODIUM_BLOCKS values are in the picture's
+## own pixels (720x240) and get scaled into this rectangle.
+const PODIUM_RECT := Rect2(40, 472, 640, 213)
 ## Per place (#1, #2, #3): x range of the block in podium.png, the y of its
-## top surface, and its bottom (for reference).
+## top surface, and its bottom.
 const PODIUM_BLOCKS: Array[Vector4] = [
 	Vector4(227, 495, 6, 201),  # gold, centre
 	Vector4(26, 229, 68, 193),  # silver, left
 	Vector4(491, 683, 78, 193),  # bronze, right
 ]
-const PODIUM_AVATAR: Array[float] = [116.0, 92.0, 92.0]
+const PODIUM_AVATAR: Array[float] = [128.0, 112.0, 112.0]
+## Plate colours on the podium fronts (#1 pink, #2 purple, #3 orange).
+const PLATE_COLORS: Array[Color] = [Color(0.93, 0.27, 0.56), Color(0.5, 0.33, 0.9), Color(0.92, 0.45, 0.24)]
 
-const PANEL_RECT := Rect2(8, 470, 704, 802)
-## panel.png nine-patch margins (left, top, right, bottom) in its pixels.
-const PANEL_MARGINS := [56, 124, 56, 48]
+const LIST_LEFT := 34.0
+const LIST_RIGHT := 686.0
+const LIST_TOP := 690.0
+const LIST_BOTTOM_WITH_PIN := 1004.0
+const LIST_BOTTOM_NO_PIN := 1112.0
+const ROW_H := 86.0
+const ROW_GAP := 10
 
-const TAB_W := 300.0
-const TAB_Y := 586.0
-const TAB_X: Array[float] = [48.0, 372.0]
-## The pill inside tab_selected.png starts this far down (the crown sits
-## above it) and is this tall, in the picture's pixels (360 wide).
-const TAB_ON_PILL_TOP := 64.0
-const TAB_PILL_H := 121.0
+const PINNED_RECT := Rect2(28, 1016, 664, 96)
 
-const LIST_LEFT := 38.0
-const LIST_RIGHT := 682.0
-const LIST_GAP_BELOW_TABS := 12.0
-const LIST_BOTTOM_WITH_PIN := 1094.0
-const LIST_BOTTOM_NO_PIN := 1240.0
-const ROW_H := 76.0
-const ROW_GAP := 8
+const PLAY_RECT := Rect2(170, 1138, 380, 86)
+const CAPTION_Y := 1232.0
 
-const PINNED_RECT := Rect2(20, 1082, 680, 181)
-## Slots in pinned_row.png's own pixels (720x192).
-const PIN_RANK_CENTER := Vector2(85, 123)
-const PIN_AVATAR_CENTER := Vector2(188, 123)
-const PIN_AVATAR_SIZE := 64.0
-const PIN_NAME_RECT := Rect2(250, 101, 236, 48)
-const PIN_SCORE_RECT := Rect2(556, 101, 124, 48)
+# --- Colours ----------------------------------------------------------------
 
-const DARK_TEXT := Color(0.27, 0.11, 0.5)
+const DARK_TEXT := Color(0.2, 0.1, 0.42)
 const LIGHT_TEXT := Color(1, 1, 1)
-const OUTLINE := Color(0.2, 0.06, 0.42)
-const ROW_COLOR := Color(0.95, 0.92, 1.0, 0.96)
-const ROW_EDGE := Color(0.71, 0.6, 0.95)
-const MY_ROW_COLOR := Color(1.0, 0.84, 0.22)
-const MY_ROW_EDGE := Color(0.93, 0.55, 0.06)
+const OUTLINE := Color(0.22, 0.06, 0.45)
+const GOLD_TEXT := Color(1, 0.86, 0.24)
+const CREAM := Color(1, 0.97, 0.88)
+## Row styles: body, rank band, top highlight, bottom edge.
+const ROW_BLUE: Array[Color] = [Color(0.46, 0.73, 1.0), Color(0.31, 0.56, 0.98), Color(0.8, 0.92, 1.0), Color(0.22, 0.4, 0.85)]
+const ROW_LILAC: Array[Color] = [Color(0.72, 0.6, 1.0), Color(0.57, 0.43, 0.94), Color(0.9, 0.85, 1.0), Color(0.42, 0.28, 0.8)]
+const ROW_ME: Array[Color] = [Color(0.5, 0.24, 0.88), Color(0.39, 0.15, 0.76), Color(0.88, 1.0, 0.35), Color(0.88, 1.0, 0.35)]
+const SCORE_PILL := Color(0.45, 0.22, 0.85)
+const SCORE_PILL_ME := Color(0.3, 0.1, 0.62)
 
 enum Tab { TOTAL, DAILY }
 
@@ -136,17 +144,15 @@ var _entries: Array = []
 var _loaded_ok := false
 var _loading := false
 var _my_avatar := -1
+var _press_scroll := 0
 
+var _font_bold: FontVariation
 var _status: Label
 var _scroll: ScrollContainer
 var _rows: VBoxContainer
 var _tabs: Array[Dictionary] = []
 var _podium: Array[Dictionary] = []
-var _pinned: Control
-var _pin_rank: Label
-var _pin_avatar: TextureRect
-var _pin_name: Label
-var _pin_score: Label
+var _pinned: Button
 var _info: Control
 var _editor: Control
 var _editor_panel: Control
@@ -222,8 +228,6 @@ func _on_leaderboard_loaded(entries: Array, ok: bool) -> void:
 func _on_me_loaded(result: Dictionary) -> void:
 	if not visible or result.is_empty():
 		return
-	if _my_avatar < 0:
-		_my_avatar = _default_avatar(Backend.player_id)
 	if _editor.visible and not _name_edit.has_focus() and not _saving:
 		_name_edit.text = Backend.display_name
 	_render()
@@ -276,7 +280,15 @@ func _render() -> void:
 		var entry: Dictionary = list[i]
 		var is_me := _is_me(entry)
 		me_shown = me_shown or is_me
-		_rows.add_child(_make_row(i + 1, entry, is_me))
+		var row := _make_row(str(i + 1), str(entry.get("display_name", "?")),
+				_fmt(int(entry.get("best_score", 0))), _avatar_for(entry), is_me, i - 3)
+		if is_me:
+			# PASS: a tap opens the editor while drags still scroll the list.
+			row.mouse_filter = Control.MOUSE_FILTER_PASS
+			row.mouse_default_cursor_shape = CURSOR_POINTING_HAND
+			row.tooltip_text = "Edit your profile"
+			row.gui_input.connect(_on_my_row_input)
+		_rows.add_child(row)
 	_scroll.scroll_vertical = 0
 
 	_status.visible = true
@@ -297,8 +309,8 @@ func _render() -> void:
 
 	# Pinned row only when the player isn't already visible above.
 	_pinned.visible = not me_shown
-	_scroll.offset_bottom = LIST_BOTTOM_WITH_PIN if _pinned.visible else LIST_BOTTOM_NO_PIN
-	_status.offset_bottom = _scroll.offset_bottom
+	_scroll.size.y = (LIST_BOTTOM_WITH_PIN if _pinned.visible else LIST_BOTTOM_NO_PIN) - LIST_TOP
+	_status.size.y = _scroll.size.y
 	_fill_pinned()
 
 
@@ -308,9 +320,11 @@ func _fill_podium(place: int, entry: Dictionary) -> bool:
 	var empty := entry.is_empty()
 	var is_me := not empty and _is_me(entry)
 	(slot["avatar"] as TextureRect).texture = null if empty else _avatar_for(entry)
-	(slot["avatar"] as TextureRect).modulate = Color.WHITE
 	(slot["empty"] as Label).visible = empty
-	(slot["name"] as Label).text = "---" if empty else str(entry.get("display_name", "?"))
+	(slot["glow"] as Control).visible = not empty
+	var name_label: Label = slot["name"]
+	name_label.text = "---" if empty else str(entry.get("display_name", "?"))
+	_fit_text(name_label, 27 if place == 0 else 22, 16)
 	(slot["score"] as Label).text = "0" if empty else _fmt(int(entry.get("best_score", 0)))
 	(slot["you"] as Control).visible = is_me
 	(slot["button"] as Button).disabled = not is_me
@@ -319,97 +333,140 @@ func _fill_podium(place: int, entry: Dictionary) -> bool:
 
 
 func _fill_pinned() -> void:
+	for child in _pinned.get_children():
+		_pinned.remove_child(child)
+		child.queue_free()
 	var on_board := Backend.my_rank > 0 and _tab == Tab.TOTAL
-	_pin_rank.text = str(Backend.my_rank) if on_board else "-"
-	_pin_rank.add_theme_font_size_override("font_size", 30 if _pin_rank.text.length() <= 2 else (24 if _pin_rank.text.length() == 3 else 18))
-	_pin_avatar.texture = AVATARS[_my_avatar_index()]
-	_pin_name.text = Backend.display_name if Backend.display_name != "" else "You"
-	_pin_score.text = _fmt(Backend.my_best) if on_board else "-"
+	var row := _make_row(str(Backend.my_rank) if on_board else "-",
+			Backend.display_name if Backend.display_name != "" else "You",
+			_fmt(Backend.my_best) if on_board else "-",
+			AVATARS[_my_avatar_index()], true, 0)
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_pinned.add_child(row)
 
 
-func _make_row(rank: int, entry: Dictionary, is_me: bool) -> Control:
+## One ranking row: big rank number on a darker band, framed avatar, name and
+## a score pill. Your own row is purple with a glowing edge and a "You" tag.
+## Returns a holder Control so the tag can poke out above the row.
+func _make_row(rank_text: String, player_name: String, score_text: String,
+		avatar_tex: Texture2D, is_me: bool, index: int) -> Control:
+	var colors: Array[Color] = ROW_ME if is_me else (ROW_LILAC if index % 3 == 2 else ROW_BLUE)
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(0, ROW_H)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
 	var row := PanelContainer.new()
-	row.custom_minimum_size.y = ROW_H
-	# PASS: taps reach the row (your own row opens the editor) while drags
-	# still scroll the list.
-	row.mouse_filter = Control.MOUSE_FILTER_PASS if is_me else Control.MOUSE_FILTER_IGNORE
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
 	var style := StyleBoxFlat.new()
-	style.bg_color = MY_ROW_COLOR if is_me else ROW_COLOR
-	style.border_color = MY_ROW_EDGE if is_me else ROW_EDGE
-	style.border_width_bottom = 5
-	style.border_width_top = 0 if not is_me else 3
-	style.border_width_left = 0 if not is_me else 3
-	style.border_width_right = 0 if not is_me else 3
+	style.bg_color = colors[0]
+	style.border_color = colors[2]
+	style.border_width_top = 3
+	style.border_width_left = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 6
 	if is_me:
-		style.border_color = Color(1, 0.97, 0.7)
-		style.shadow_color = Color(1, 0.75, 0.1, 0.55)
-		style.shadow_size = 8
-	style.set_corner_radius_all(24)
-	style.content_margin_left = 14
-	style.content_margin_right = 20
+		style.set_border_width_all(4)
+		style.border_width_bottom = 6
+		style.shadow_color = Color(0.85, 1.0, 0.3, 0.55)
+		style.shadow_size = 10
+	style.set_corner_radius_all(int(ROW_H / 2.0))
+	style.content_margin_left = 6
+	style.content_margin_right = 12
+	style.content_margin_top = 4
+	style.content_margin_bottom = 6
 	row.add_theme_stylebox_override("panel", style)
-	if is_me:
-		row.gui_input.connect(_on_my_row_input)
-		row.mouse_default_cursor_shape = CURSOR_POINTING_HAND
-		row.tooltip_text = "Edit your profile"
+	holder.add_child(row)
 
 	var line := HBoxContainer.new()
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line.add_theme_constant_override("separation", 14)
+	line.add_theme_constant_override("separation", 12)
 	row.add_child(line)
 
-	line.add_child(_rank_badge(rank))
+	# Rank number on a darker rounded band.
+	var band := PanelContainer.new()
+	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	band.custom_minimum_size = Vector2(96, 0)
+	var band_style := StyleBoxFlat.new()
+	band_style.bg_color = colors[1]
+	band_style.set_corner_radius_all(int(ROW_H / 2.0) - 6)
+	band.add_theme_stylebox_override("panel", band_style)
+	var rank := _label(rank_text, 46 if rank_text.length() <= 2 else (36 if rank_text.length() == 3 else 28),
+			LIGHT_TEXT, OUTLINE, 10, FONT_TITLE)
+	rank.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rank.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	band.add_child(rank)
+	line.add_child(band)
 
-	var avatar := _texture(_avatar_for(entry))
-	avatar.custom_minimum_size = Vector2(58, 58)
-	avatar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	line.add_child(avatar)
+	# Avatar in a white rounded frame.
+	var frame := PanelContainer.new()
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var frame_style := StyleBoxFlat.new()
+	frame_style.bg_color = Color(1, 1, 1, 0.35)
+	frame_style.border_color = Color(1, 1, 1)
+	frame_style.set_border_width_all(3)
+	frame_style.set_corner_radius_all(18)
+	frame_style.set_content_margin_all(3)
+	frame.add_theme_stylebox_override("panel", frame_style)
+	var avatar := _texture(avatar_tex)
+	avatar.custom_minimum_size = Vector2(62, 62)
+	frame.add_child(avatar)
+	line.add_child(frame)
 
-	var name_label := _label(str(entry.get("display_name", "?")), 28, DARK_TEXT)
+	var name_label := _label(player_name, 30, LIGHT_TEXT if is_me else DARK_TEXT,
+			OUTLINE if is_me else Color(1, 1, 1, 0.0), 6 if is_me else 0)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.clip_text = true
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	line.add_child(name_label)
 
+	line.add_child(_score_pill(score_text, SCORE_PILL_ME if is_me else SCORE_PILL, 156, 54, 30))
+
 	if is_me:
 		var you := _texture(TEX_YOU)
-		you.custom_minimum_size = Vector2(62, 56)
-		you.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		line.add_child(you)
+		you.position = Vector2(4, -30)
+		you.size = Vector2(66, 60)
+		holder.add_child(you)
+	return holder
 
+
+## A rounded pill with a star and a score: purple with white text in the
+## list, cream with dark text on the podium.
+func _score_pill(text: String, color: Color, width: float, height: float, font_size: int,
+		light := false) -> PanelContainer:
+	var pill := PanelContainer.new()
+	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill.custom_minimum_size = Vector2(width, height)
+	pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var style := StyleBoxFlat.new()
+	style.bg_color = color
+	style.border_color = color.lightened(0.35) if not light else Color(1, 1, 1)
+	style.set_border_width_all(2)
+	style.border_width_bottom = 4
+	if light:
+		style.border_color = Color(0.86, 0.72, 0.5)
+	style.set_corner_radius_all(int(height / 2.0))
+	style.content_margin_left = 10
+	style.content_margin_right = 14
+	pill.add_theme_stylebox_override("panel", style)
+	var line := HBoxContainer.new()
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	line.add_theme_constant_override("separation", 6)
+	pill.add_child(line)
 	var star := _texture(TEX_STAR)
-	star.custom_minimum_size = Vector2(36, 36)
+	star.custom_minimum_size = Vector2(height * 0.66, height * 0.66)
 	star.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	line.add_child(star)
-
-	var score := _label(_fmt(int(entry.get("best_score", 0))), 28, DARK_TEXT)
-	score.custom_minimum_size.x = 112
-	score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var score := _label(text, font_size, DARK_TEXT if light else LIGHT_TEXT,
+			Color(0, 0, 0, 0) if light else OUTLINE, 0 if light else 6, FONT_TITLE)
+	score.name = "Score"
+	score.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	score.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	line.add_child(score)
-	return row
-
-
-func _rank_badge(rank: int) -> Control:
-	if rank - 4 < RANK_BADGES.size():
-		var badge := _texture(RANK_BADGES[rank - 4])
-		badge.custom_minimum_size = Vector2(56, 56)
-		badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		return badge
-	# Ranks past 10: a circle drawn to match the badge art.
-	var circle := PanelContainer.new()
-	circle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	circle.custom_minimum_size = Vector2(56, 56)
-	circle.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.38, 0.15, 0.78)
-	style.border_color = Color(0.68, 0.5, 1.0)
-	style.set_border_width_all(3)
-	style.set_corner_radius_all(28)
-	circle.add_theme_stylebox_override("panel", style)
-	var label := _label(str(rank), 22 if rank < 100 else 18, LIGHT_TEXT)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	circle.add_child(label)
-	return circle
+	return pill
 
 
 func _clear_rows() -> void:
@@ -420,18 +477,11 @@ func _clear_rows() -> void:
 
 func _on_my_row_input(event: InputEvent) -> void:
 	# A tap (press and release without scrolling) opens the editor.
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT \
-			and not event.pressed and not _scroll_moved_since_press():
-		_open_editor()
-	elif event is InputEventMouseButton and event.pressed:
-		_press_scroll = _scroll.scroll_vertical
-
-
-var _press_scroll := 0
-
-
-func _scroll_moved_since_press() -> bool:
-	return absi(_scroll.scroll_vertical - _press_scroll) > 6
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_press_scroll = _scroll.scroll_vertical
+		elif absi(_scroll.scroll_vertical - _press_scroll) <= 6:
+			_open_editor()
 
 
 # --- Tabs -------------------------------------------------------------------
@@ -442,8 +492,9 @@ func _select_tab(tab: Tab, render := true) -> void:
 		var on := i == int(tab)
 		(_tabs[i]["on"] as Control).visible = on
 		(_tabs[i]["off"] as Control).visible = not on
-		(_tabs[i]["label"] as Label).add_theme_color_override("font_color", DARK_TEXT if on else LIGHT_TEXT)
-		(_tabs[i]["label"] as Label).add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.6) if on else OUTLINE)
+		var label: Label = _tabs[i]["label"]
+		label.add_theme_color_override("font_color", DARK_TEXT if on else LIGHT_TEXT)
+		label.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.55) if on else OUTLINE)
 		(_tabs[i]["button"] as Button).set_pressed_no_signal(on)
 	if render:
 		_render()
@@ -519,12 +570,25 @@ func _on_name_changed(result: Dictionary) -> void:
 func _build() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	_font_bold = FontVariation.new()
+	_font_bold.base_font = FONT_BODY
+	_font_bold.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 600}
+	var ui_theme := Theme.new()
+	ui_theme.default_font = _font_bold
+	theme = ui_theme
 
 	var bg := _texture(TEX_BACKGROUND, TextureRect.STRETCH_KEEP_ASPECT_COVERED)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	# Panel behind everything else; its wavy top hides behind the podium.
+	# Two monsters peek out from behind the panel, beside the title.
+	for pair in [[TEX_PEEK_LEFT, PEEK_LEFT_RECT, -8.0], [TEX_PEEK_RIGHT, PEEK_RIGHT_RECT, 8.0]]:
+		var peek := _texture(pair[0])
+		_place(peek, pair[1])
+		peek.pivot_offset = peek.size / 2.0
+		peek.rotation_degrees = pair[2]
+		add_child(peek)
+
 	var panel := NinePatchRect.new()
 	panel.texture = TEX_PANEL
 	panel.patch_margin_left = PANEL_MARGINS[0]
@@ -535,44 +599,188 @@ func _build() -> void:
 	_place(panel, PANEL_RECT)
 	add_child(panel)
 
-	_build_podium()
 	_build_header()
-	_build_list()
 	_build_tabs()
+	_build_podium()
+	_build_list()
 	_build_pinned()
+	_build_play_more()
 	_build_info()
 	_build_editor()
 
 
 func _build_header() -> void:
-	var logo := _texture(TEX_LOGO)
-	_place(logo, LOGO_RECT)
-	add_child(logo)
-	var back := _icon_button(TEX_BACK, BACK_POS, "Back")
+	# "Leaderboard" banner with a crown on top.
+	var banner := Panel.new()
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.8, 0.42, 0.95)
+	style.border_color = Color(0.98, 0.82, 1.0)
+	style.set_border_width_all(4)
+	style.border_width_bottom = 10
+	style.set_corner_radius_all(48)
+	style.shadow_color = Color(0.25, 0.05, 0.45, 0.45)
+	style.shadow_size = 8
+	style.shadow_offset = Vector2(0, 5)
+	banner.add_theme_stylebox_override("panel", style)
+	_place(banner, TITLE_RECT)
+	add_child(banner)
+	var inner := Panel.new()
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var inner_style := StyleBoxFlat.new()
+	inner_style.bg_color = Color(0.62, 0.24, 0.85)
+	inner_style.set_corner_radius_all(38)
+	inner.add_theme_stylebox_override("panel", inner_style)
+	_place(inner, Rect2(12, 12, TITLE_RECT.size.x - 24, TITLE_RECT.size.y - 30))
+	banner.add_child(inner)
+	var title := _label("Leaderboard", 58, GOLD_TEXT, Color(0.42, 0.1, 0.55), 14, FONT_TITLE)
+	title.add_theme_color_override("font_shadow_color", Color(0.3, 0.05, 0.4, 0.8))
+	title.add_theme_constant_override("shadow_offset_y", 5)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_place(title, Rect2(0, -6, TITLE_RECT.size.x, TITLE_RECT.size.y))
+	banner.add_child(title)
+	var crown := _texture(TEX_CROWN)
+	_place(crown, Rect2(TITLE_RECT.get_center().x - 46, TITLE_RECT.position.y - 50, 92, 70))
+	add_child(crown)
+
+	var back := _icon_button(TEX_BACK, BACK_RECT, "Back")
 	back.pressed.connect(close)
-	var edit := _icon_button(TEX_EDIT, EDIT_POS, "Edit profile")
-	edit.pressed.connect(_open_editor)
-	var info := _icon_button(TEX_INFO, INFO_POS, "How the leaderboard works")
+	var info := _icon_button(TEX_INFO, INFO_RECT, "How the leaderboard works")
 	info.pressed.connect(func() -> void:
 		GameAudio.play("click")
 		_info.visible = true
 		_pop_in(_info.get_child(1) as Control))
+	var edit := _icon_button(TEX_EDIT, EDIT_RECT, "Edit profile")
+	edit.pressed.connect(_open_editor)
+
+
+func _build_tabs() -> void:
+	var titles := ["Total Ranking", "Daily Ranking"]
+	for i in 2:
+		var rect: Rect2 = TAB_RECTS[i]
+		var off := _pill_texture(TEX_TAB_OFF, rect)
+		add_child(off)
+		var on := _pill_texture(TEX_TAB_ON, rect)
+		add_child(on)
+
+		var button := Button.new()
+		button.flat = true
+		button.toggle_mode = true
+		button.tooltip_text = titles[i]
+		button.mouse_default_cursor_shape = CURSOR_POINTING_HAND
+		_place(button, rect)
+		var tab: Tab = Tab.TOTAL if i == 0 else Tab.DAILY
+		button.pressed.connect(func() -> void:
+			GameAudio.play("click")
+			_select_tab(tab))
+		add_child(button)
+
+		var line := HBoxContainer.new()
+		line.alignment = BoxContainer.ALIGNMENT_CENTER
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		line.add_theme_constant_override("separation", 10)
+		_place(line, Rect2(rect.position + Vector2(0, -3), rect.size))
+		add_child(line)
+		var icon: Control
+		if i == 0:
+			icon = _texture(TEX_CROWN)
+		else:
+			icon = Control.new()
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			icon.draw.connect(_draw_calendar.bind(icon))
+		icon.custom_minimum_size = Vector2(44, 36)
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		line.add_child(icon)
+		var label := _label(titles[i], 30, LIGHT_TEXT, OUTLINE, 6)
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		line.add_child(label)
+		_tabs.append({"on": on, "off": off, "label": label, "button": button})
+
+
+## A small calendar icon for the Daily tab (there is no art for it).
+func _draw_calendar(icon: Control) -> void:
+	var r := Rect2(Vector2(6, 2), Vector2(32, 32))
+	icon.draw_rect(Rect2(r.position + Vector2(0, 2), r.size), Color(0.25, 0.08, 0.5, 0.5))
+	var body := StyleBoxFlat.new()
+	body.bg_color = Color(1, 1, 1)
+	body.set_corner_radius_all(6)
+	icon.draw_style_box(body, r)
+	var top := StyleBoxFlat.new()
+	top.bg_color = Color(0.98, 0.42, 0.62)
+	top.corner_radius_top_left = 6
+	top.corner_radius_top_right = 6
+	icon.draw_style_box(top, Rect2(r.position, Vector2(r.size.x, 10)))
+	for row in 2:
+		for col in 3:
+			icon.draw_rect(Rect2(r.position + Vector2(5 + col * 8, 15 + row * 8), Vector2(5, 5)), Color(0.45, 0.25, 0.8))
+	icon.draw_rect(Rect2(r.position + Vector2(7, -3), Vector2(4, 7)), Color(0.45, 0.25, 0.8))
+	icon.draw_rect(Rect2(r.position + Vector2(21, -3), Vector2(4, 7)), Color(0.45, 0.25, 0.8))
+
+
+func _pill_texture(tex: Texture2D, rect: Rect2) -> NinePatchRect:
+	var pill := NinePatchRect.new()
+	pill.texture = tex
+	var side := int(tex.get_height() * 0.5)
+	pill.patch_margin_left = side
+	pill.patch_margin_right = side
+	pill.patch_margin_top = int(tex.get_height() * 0.45)
+	pill.patch_margin_bottom = int(tex.get_height() * 0.45)
+	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The art is a little taller than the tab; centre it on the tab.
+	var h := float(tex.get_height())
+	_place(pill, Rect2(rect.position.x, rect.get_center().y - h / 2.0, rect.size.x, h))
+	return pill
 
 
 func _build_podium() -> void:
-	var podium := _texture(TEX_PODIUM)
-	_place(podium, PODIUM_RECT)
-	add_child(podium)
 	var k := PODIUM_RECT.size.x / float(TEX_PODIUM.get_width())
+	# Glows go behind the podium so they shine out from behind the winners.
+	var glows: Array[Control] = []
+	var places: Array[Dictionary] = []
 	for place in 3:
 		var block := PODIUM_BLOCKS[place]
 		var left := PODIUM_RECT.position.x + block.x * k
 		var right := PODIUM_RECT.position.x + block.y * k
 		var top := PODIUM_RECT.position.y + block.z * k
-		var cx := (left + right) / 2.0
+		var bottom := PODIUM_RECT.position.y + block.w * k
 		var size: float = PODIUM_AVATAR[place]
-		# Avatar stands on the block's top surface, crown on its head.
-		var avatar_rect := Rect2(cx - size / 2.0, top + 16.0 - size, size, size)
+		var cx := (left + right) / 2.0
+		var avatar_rect := Rect2(cx - size / 2.0, top + 22.0 - size, size, size)
+		places.append({"left": left, "right": right, "top": top, "bottom": bottom, "cx": cx, "avatar": avatar_rect})
+
+		var glow_size := size * (2.3 if place == 0 else 1.8)
+		var glow := _texture(_glow_texture(place == 0), TextureRect.STRETCH_SCALE)
+		_place(glow, Rect2(avatar_rect.get_center() - Vector2(glow_size, glow_size) / 2.0, Vector2(glow_size, glow_size)))
+		glow.pivot_offset = glow.size / 2.0
+		add_child(glow)
+		glows.append(glow)
+		# Gentle pulse so the winners stand out.
+		var pulse := glow.create_tween().set_loops()
+		pulse.tween_property(glow, "scale", Vector2(1.08, 1.08), 1.2).set_trans(Tween.TRANS_SINE)
+		pulse.tween_property(glow, "scale", Vector2(0.95, 0.95), 1.2).set_trans(Tween.TRANS_SINE)
+
+	# Sparkles around the winner.
+	var c: Vector2 = (places[0]["avatar"] as Rect2).get_center()
+	for spark in [[Vector2(-92, -40), 22.0], [Vector2(86, -56), 18.0], [Vector2(-70, 46), 14.0], [Vector2(96, 30), 20.0]]:
+		var star := _texture(TEX_STAR)
+		var s: float = spark[1]
+		_place(star, Rect2(c + spark[0] - Vector2(s, s) / 2.0, Vector2(s, s)))
+		star.pivot_offset = star.size / 2.0
+		glows[0].add_sibling(star)
+		var twinkle := star.create_tween().set_loops()
+		twinkle.tween_property(star, "modulate:a", 0.25, 0.9 + s * 0.02)
+		twinkle.tween_property(star, "modulate:a", 1.0, 0.9 + s * 0.02)
+
+	var podium := _texture(TEX_PODIUM)
+	_place(podium, PODIUM_RECT)
+	add_child(podium)
+
+	for place in 3:
+		var p: Dictionary = places[place]
+		var avatar_rect: Rect2 = p["avatar"]
+		var size := avatar_rect.size.x
+		var cx: float = p["cx"]
 
 		var button := Button.new()
 		button.flat = true
@@ -585,145 +793,189 @@ func _build_podium() -> void:
 		var avatar := _texture(null)
 		_place(avatar, avatar_rect)
 		add_child(avatar)
-
-		var empty := _label("?", int(size * 0.5), LIGHT_TEXT, OUTLINE, 8)
+		var empty := _label("?", int(size * 0.5), LIGHT_TEXT, OUTLINE, 8, FONT_TITLE)
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_place(empty, avatar_rect)
 		add_child(empty)
 
-		var crown_h := size * 0.56
-		var crown := _texture(CROWNS[place])
-		_place(crown, Rect2(cx - crown_h * 0.7, avatar_rect.position.y - crown_h + 8.0, crown_h * 1.4, crown_h))
-		add_child(crown)
+		if place == 0:
+			var crown := _texture(TEX_CROWN)
+			_place(crown, Rect2(cx - 40, avatar_rect.position.y - 46, 80, 60))
+			crown.rotation_degrees = 8
+			add_child(crown)
+
+		# Coloured plate on the block's front: name + score pill.
+		var plate_top: float = p["top"] + (30.0 if place == 0 else 24.0)
+		var plate_rect := Rect2(p["left"] + 12.0, plate_top, p["right"] - p["left"] - 24.0, p["bottom"] - plate_top - 2.0)
+		var plate := Panel.new()
+		plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var plate_style := StyleBoxFlat.new()
+		plate_style.bg_color = PLATE_COLORS[place]
+		plate_style.border_color = PLATE_COLORS[place].lightened(0.35)
+		plate_style.set_border_width_all(3)
+		plate_style.border_width_bottom = 6
+		plate_style.border_color = PLATE_COLORS[place].lightened(0.35)
+		plate_style.set_corner_radius_all(22)
+		plate.add_theme_stylebox_override("panel", plate_style)
+		_place(plate, plate_rect)
+		add_child(plate)
+
+		var medal_h := 70.0 if place == 0 else 54.0
+		var medal := _texture(MEDALS[place])
+		_place(medal, Rect2(cx - medal_h * 0.66, plate_top - medal_h * 0.52, medal_h * 1.32, medal_h))
+		add_child(medal)
 
 		var you := _texture(TEX_YOU)
-		_place(you, Rect2(avatar_rect.end.x - 26, avatar_rect.position.y - 20, 56, 50))
+		_place(you, Rect2(avatar_rect.end.x - 30, avatar_rect.position.y - 18, 60, 54))
 		add_child(you)
 
-		# Name and score on the block's front face (inside the laurels on #1).
-		var face_top := top + (36.0 if place == 0 else 26.0)
-		var text_w := (right - left) - (80.0 if place == 0 else 24.0)
-		var name_label := _label("", 22 if place == 0 else 20, DARK_TEXT, Color(1, 1, 1, 0.7), 4)
+		var name_y := plate_top + medal_h * 0.5
+		var name_label := _label("", 27 if place == 0 else 22, LIGHT_TEXT, OUTLINE, 7)
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		name_label.clip_text = true
 		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		_place(name_label, Rect2(cx - text_w / 2.0, face_top, text_w, 32))
+		_place(name_label, Rect2(plate_rect.position.x + 6, name_y, plate_rect.size.x - 12, 32 if place == 0 else 28))
 		add_child(name_label)
 
-		var score_row := HBoxContainer.new()
-		score_row.alignment = BoxContainer.ALIGNMENT_CENTER
-		score_row.add_theme_constant_override("separation", 4)
-		score_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_place(score_row, Rect2(cx - text_w / 2.0, face_top + 32.0, text_w, 36))
-		add_child(score_row)
-		var star := _texture(TEX_STAR)
-		star.custom_minimum_size = Vector2(28, 28) if place else Vector2(32, 32)
-		star.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		score_row.add_child(star)
-		var score := _label("", 28 if place == 0 else 24, DARK_TEXT, Color(1, 1, 1, 0.7), 4)
-		score_row.add_child(score)
+		var pill_h := 44.0 if place == 0 else 36.0
+		var pill_w := minf(plate_rect.size.x - 24.0, 170.0)
+		var pill := _score_pill("", CREAM, pill_w, pill_h, 30 if place == 0 else 25, true)
+		_place(pill, Rect2(cx - pill_w / 2.0, name_y + (34.0 if place == 0 else 29.0), pill_w, pill_h))
+		add_child(pill)
+		var score: Label = pill.find_child("Score", true, false)
+
 		_podium.append({"avatar": avatar, "empty": empty, "name": name_label, "score": score,
-				"you": you, "button": button})
+				"you": you, "button": button, "glow": glows[place]})
 
 
-func _build_tabs() -> void:
-	var k := TAB_W / float(TEX_TAB_ON.get_width())
-	var pill_h := TAB_PILL_H * k
-	var titles := ["Total Ranking", "Daily Ranking"]
-	for i in 2:
-		var x: float = TAB_X[i]
-		var off := _texture(TEX_TAB_OFF, TextureRect.STRETCH_SCALE)
-		var off_h := TEX_TAB_OFF.get_height() * k
-		_place(off, Rect2(x, TAB_Y + (pill_h - off_h) / 2.0, TAB_W, off_h))
-		add_child(off)
-		var on := _texture(TEX_TAB_ON, TextureRect.STRETCH_SCALE)
-		_place(on, Rect2(x, TAB_Y - TAB_ON_PILL_TOP * k, TAB_W, TEX_TAB_ON.get_height() * k))
-		add_child(on)
-
-		var button := Button.new()
-		button.flat = true
-		button.toggle_mode = true
-		button.focus_mode = Control.FOCUS_ALL
-		button.tooltip_text = titles[i]
-		_place(button, Rect2(x, TAB_Y, TAB_W, pill_h))
-		var tab: Tab = Tab.TOTAL if i == 0 else Tab.DAILY
-		button.pressed.connect(func() -> void:
-			GameAudio.play("click")
-			_select_tab(tab))
-		add_child(button)
-
-		var label := _label(titles[i], 27, LIGHT_TEXT, OUTLINE, 6)
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		_place(label, Rect2(x, TAB_Y - 4, TAB_W, pill_h))
-		add_child(label)
-		_tabs.append({"on": on, "off": off, "label": label, "button": button})
+## Soft radial glow: warm gold behind #1, a lighter lilac behind #2 and #3.
+func _glow_texture(gold: bool) -> GradientTexture2D:
+	var gradient := Gradient.new()
+	var inner := Color(1.0, 0.88, 0.4, 1.0) if gold else Color(0.92, 0.82, 1.0, 0.8)
+	gradient.set_color(0, inner)
+	gradient.set_color(1, Color(inner, 0.0))
+	gradient.add_point(0.45, Color(inner, inner.a * 0.45))
+	var tex := GradientTexture2D.new()
+	tex.gradient = gradient
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 0.0)
+	tex.width = 256
+	tex.height = 256
+	return tex
 
 
 func _build_list() -> void:
-	var top := TAB_Y + TAB_PILL_H * TAB_W / float(TEX_TAB_ON.get_width()) + LIST_GAP_BELOW_TABS
 	_scroll = ScrollContainer.new()
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	_place(_scroll, Rect2(LIST_LEFT, top, LIST_RIGHT - LIST_LEFT, LIST_BOTTOM_WITH_PIN - top))
+	_place(_scroll, Rect2(LIST_LEFT, LIST_TOP, LIST_RIGHT - LIST_LEFT, LIST_BOTTOM_WITH_PIN - LIST_TOP))
 	add_child(_scroll)
+	var margin := MarginContainer.new()
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Room for the row glow and the "You" tag so they aren't clipped.
+	margin.add_theme_constant_override("margin_top", 24)
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_right", 6)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	_scroll.add_child(margin)
 	_rows = VBoxContainer.new()
-	_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_rows.add_theme_constant_override("separation", ROW_GAP)
-	_scroll.add_child(_rows)
+	margin.add_child(_rows)
 
-	_status = _label("", 28, LIGHT_TEXT, OUTLINE, 6)
+	_status = _label("", 30, LIGHT_TEXT, OUTLINE, 7)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_place(_status, Rect2(LIST_LEFT, top, LIST_RIGHT - LIST_LEFT, LIST_BOTTOM_WITH_PIN - top))
+	_place(_status, Rect2(LIST_LEFT, LIST_TOP, LIST_RIGHT - LIST_LEFT, LIST_BOTTOM_WITH_PIN - LIST_TOP))
 	add_child(_status)
 
 
 func _build_pinned() -> void:
 	_pinned = Button.new()
-	(_pinned as Button).flat = true
+	_pinned.flat = true
 	_pinned.tooltip_text = "Edit your profile"
 	_pinned.mouse_default_cursor_shape = CURSOR_POINTING_HAND
 	_place(_pinned, PINNED_RECT)
-	(_pinned as Button).pressed.connect(_open_editor)
+	_pinned.pressed.connect(_open_editor)
 	add_child(_pinned)
-	var art := _texture(TEX_PINNED, TextureRect.STRETCH_SCALE)
-	art.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_pinned.add_child(art)
 
-	var k := PINNED_RECT.size.x / float(TEX_PINNED.get_width())
-	_pin_rank = _label("", 30, LIGHT_TEXT, OUTLINE, 6)
-	_pin_rank.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_pin_rank.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_place(_pin_rank, Rect2(PIN_RANK_CENTER * k - Vector2(34, 26), Vector2(68, 52)))
-	_pinned.add_child(_pin_rank)
 
-	_pin_avatar = _texture(null)
-	var a := PIN_AVATAR_SIZE * k
-	_place(_pin_avatar, Rect2(PIN_AVATAR_CENTER * k - Vector2(a, a) / 2.0, Vector2(a, a)))
-	_pinned.add_child(_pin_avatar)
+func _build_play_more() -> void:
+	var button := Button.new()
+	button.tooltip_text = "Play More"
+	button.mouse_default_cursor_shape = CURSOR_POINTING_HAND
+	var green := Color(0.42, 0.84, 0.13)
+	for state in ["normal", "hover", "pressed", "focus"]:
+		var style := StyleBoxFlat.new()
+		style.bg_color = green.lightened(0.06) if state == "hover" else (green.darkened(0.08) if state == "pressed" else green)
+		style.border_color = Color(0.82, 1.0, 0.5)
+		style.set_border_width_all(4)
+		style.border_width_bottom = 10
+		style.set_corner_radius_all(43)
+		style.shadow_color = Color(0.1, 0.35, 0.0, 0.55)
+		style.shadow_size = 6
+		style.shadow_offset = Vector2(0, 4)
+		if state == "focus":
+			style.draw_center = false
+			style.border_color = Color(1, 1, 1, 0.8)
+			style.shadow_size = 0
+		button.add_theme_stylebox_override(state, style)
+	_place(button, PLAY_RECT)
+	button.pivot_offset = PLAY_RECT.size / 2.0
+	button.pressed.connect(func() -> void:
+		close()
+		play_more_pressed.emit())
+	add_child(button)
+	var line := HBoxContainer.new()
+	line.alignment = BoxContainer.ALIGNMENT_CENTER
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	line.add_theme_constant_override("separation", 16)
+	line.set_anchors_preset(Control.PRESET_FULL_RECT)
+	line.offset_top = -4
+	button.add_child(line)
+	var text := _label("Play More", 50, LIGHT_TEXT, Color(0.14, 0.4, 0.02), 12, FONT_TITLE)
+	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	line.add_child(text)
+	var play := Control.new()
+	play.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	play.custom_minimum_size = Vector2(42, 46)
+	play.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	play.draw.connect(func() -> void:
+		var tri := PackedVector2Array([Vector2(4, 2), Vector2(40, 23), Vector2(4, 44)])
+		play.draw_colored_polygon(tri, Color(0.14, 0.4, 0.02, 0.6))
+		play.draw_colored_polygon(PackedVector2Array([Vector2(6, 4), Vector2(36, 21), Vector2(6, 38)]), Color(1, 0.84, 0.15))
+		play.draw_polyline(PackedVector2Array([Vector2(6, 4), Vector2(36, 21), Vector2(6, 38), Vector2(6, 4)]), Color(1, 0.96, 0.6), 2.0, true))
+	line.add_child(play)
+	# Breathe gently so it reads as the next step.
+	var breathe := button.create_tween().set_loops()
+	breathe.tween_property(button, "scale", Vector2(1.04, 1.04), 0.8).set_trans(Tween.TRANS_SINE)
+	breathe.tween_property(button, "scale", Vector2.ONE, 0.8).set_trans(Tween.TRANS_SINE)
 
-	_pin_name = _label("", 28, LIGHT_TEXT, OUTLINE, 6)
-	_pin_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_pin_name.clip_text = true
-	_pin_name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_place(_pin_name, Rect2(PIN_NAME_RECT.position * k, PIN_NAME_RECT.size * k))
-	_pinned.add_child(_pin_name)
-
-	_pin_score = _label("", 28, LIGHT_TEXT, OUTLINE, 6)
-	_pin_score.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_pin_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(_pin_score, Rect2(PIN_SCORE_RECT.position * k, PIN_SCORE_RECT.size * k))
-	_pinned.add_child(_pin_score)
+	var caption := HBoxContainer.new()
+	caption.alignment = BoxContainer.ALIGNMENT_CENTER
+	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption.add_theme_constant_override("separation", 10)
+	_place(caption, Rect2(0, CAPTION_Y, 720, 40))
+	add_child(caption)
+	for part in [TEX_LAUREL_L, "Finish a game to climb the leaderboard!", TEX_LAUREL_R]:
+		if part is Texture2D:
+			var laurel := _texture(part)
+			laurel.custom_minimum_size = Vector2(22, 36)
+			caption.add_child(laurel)
+		else:
+			var label := _label(part, 24, LIGHT_TEXT, OUTLINE, 6)
+			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			caption.add_child(label)
 
 
 func _build_info() -> void:
 	_info = _modal()
 	var box := _modal_panel(Rect2(60, 330, 600, 600), "How it works")
 	_info.add_child(box)
-	var body := _label("", 26, LIGHT_TEXT, OUTLINE, 4)
+	var body := _label("", 27, LIGHT_TEXT, OUTLINE, 4)
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.text = "Total Ranking lists every player's best score of all time.\n\n" \
 			+ "Daily Ranking is coming soon.\n\n" \
@@ -731,7 +983,7 @@ func _build_info() -> void:
 			+ "to change your name and avatar."
 	_place(body, Rect2(48, 196, 504, 370))
 	box.add_child(body)
-	var close_button := _icon_button(TEX_CLOSE, Vector2(600 - 116, 112), "Close", box)
+	var close_button := _icon_button(TEX_CLOSE, Rect2(600 - 116, 112, 84, 84), "Close", box)
 	close_button.pressed.connect(func() -> void: _info.visible = false)
 
 
@@ -739,16 +991,16 @@ func _build_editor() -> void:
 	_editor = _modal()
 	_editor_panel = _modal_panel(Rect2(40, 150, 640, 980), "Edit Profile")
 	_editor.add_child(_editor_panel)
-	var close_button := _icon_button(TEX_CLOSE, Vector2(640 - 116, 112), "Close", _editor_panel)
+	var close_button := _icon_button(TEX_CLOSE, Rect2(640 - 116, 112, 84, 84), "Close", _editor_panel)
 	close_button.pressed.connect(_close_editor)
 
 	_editor_preview = _texture(null)
 	_place(_editor_preview, Rect2(245, 150, 150, 150))
 	_editor_panel.add_child(_editor_preview)
 
-	var pick := _label("Choose your avatar", 26, LIGHT_TEXT, OUTLINE, 5)
+	var pick := _label("Choose your avatar", 28, LIGHT_TEXT, OUTLINE, 6)
 	pick.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(pick, Rect2(40, 312, 560, 36))
+	_place(pick, Rect2(40, 308, 560, 40))
 	_editor_panel.add_child(pick)
 
 	# Seven avatars: four on top, three centred below.
@@ -779,18 +1031,18 @@ func _build_editor() -> void:
 		_editor_panel.add_child(choice)
 		_editor_choices.append(choice)
 
-	var name_title := _label("Display name", 26, LIGHT_TEXT, OUTLINE, 5)
-	_place(name_title, Rect2(56, 600, 528, 36))
+	var name_title := _label("Display name", 28, LIGHT_TEXT, OUTLINE, 6)
+	_place(name_title, Rect2(56, 598, 528, 40))
 	_editor_panel.add_child(name_title)
 	_name_edit = LineEdit.new()
 	_name_edit.max_length = NAME_MAX
-	_name_edit.add_theme_font_size_override("font_size", 30)
+	_name_edit.add_theme_font_size_override("font_size", 32)
 	_name_edit.add_theme_color_override("font_color", DARK_TEXT)
 	_name_edit.add_theme_color_override("font_placeholder_color", Color(DARK_TEXT, 0.45))
 	_name_edit.add_theme_color_override("caret_color", DARK_TEXT)
-	_name_edit.add_theme_stylebox_override("normal", _box(ROW_COLOR, 22, ROW_EDGE, 3, 18))
+	_name_edit.add_theme_stylebox_override("normal", _box(Color(0.95, 0.92, 1.0), 22, Color(0.71, 0.6, 0.95), 3, 18))
 	_name_edit.add_theme_stylebox_override("focus", _box(Color(1, 1, 1), 22, Color(1, 0.86, 0.25), 4, 18))
-	_name_edit.add_theme_stylebox_override("read_only", _box(Color(ROW_COLOR, 0.6), 22, ROW_EDGE, 3, 18))
+	_name_edit.add_theme_stylebox_override("read_only", _box(Color(0.95, 0.92, 1.0, 0.6), 22, Color(0.71, 0.6, 0.95), 3, 18))
 	_place(_name_edit, Rect2(56, 642, 528, 72))
 	_name_edit.text_submitted.connect(func(_text: String) -> void: _on_save_pressed())
 	_editor_panel.add_child(_name_edit)
@@ -835,9 +1087,9 @@ func _modal_panel(rect: Rect2, title: String) -> Control:
 	box.patch_margin_right = PANEL_MARGINS[2]
 	box.patch_margin_bottom = PANEL_MARGINS[3]
 	_place(box, rect)
-	var heading := _label(title, 38, Color(1, 0.86, 0.3), OUTLINE, 10)
+	var heading := _label(title, 46, GOLD_TEXT, Color(0.42, 0.1, 0.55), 12, FONT_TITLE)
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(heading, Rect2(0, 30, rect.size.x, 56))
+	_place(heading, Rect2(0, 26, rect.size.x, 60))
 	box.add_child(heading)
 	return box
 
@@ -865,14 +1117,14 @@ func _texture(tex: Texture2D, stretch := TextureRect.STRETCH_KEEP_ASPECT_CENTERE
 	return rect
 
 
-func _icon_button(tex: Texture2D, pos: Vector2, tip: String, parent: Node = self) -> TextureButton:
+func _icon_button(tex: Texture2D, rect: Rect2, tip: String, parent: Node = self) -> TextureButton:
 	var button := TextureButton.new()
 	button.texture_normal = tex
 	button.ignore_texture_size = true
 	button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 	button.tooltip_text = tip
 	button.mouse_default_cursor_shape = CURSOR_POINTING_HAND
-	_place(button, Rect2(pos, Vector2(HEADER_BUTTON, HEADER_BUTTON)))
+	_place(button, rect)
 	button.pivot_offset = button.size / 2.0
 	button.button_down.connect(func() -> void: button.scale = Vector2(0.9, 0.9))
 	button.button_up.connect(func() -> void:
@@ -885,7 +1137,7 @@ func _icon_button(tex: Texture2D, pos: Vector2, tip: String, parent: Node = self
 func _pill_button(text: String, color: Color, edge: Color, font_color: Color) -> Button:
 	var button := Button.new()
 	button.text = text
-	button.add_theme_font_size_override("font_size", 30)
+	button.add_theme_font_size_override("font_size", 32)
 	button.add_theme_color_override("font_color", font_color)
 	button.add_theme_color_override("font_hover_color", font_color)
 	button.add_theme_color_override("font_pressed_color", font_color)
@@ -909,16 +1161,29 @@ func _box(color: Color, radius: int, edge: Color, edge_w: int, margin: float) ->
 	return style
 
 
-func _label(text: String, size: int, color: Color, outline := Color(0, 0, 0, 0), outline_size := 0) -> Label:
+func _label(text: String, size: int, color: Color, outline := Color(0, 0, 0, 0), outline_size := 0,
+		font: Font = null) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if font != null:
+		label.add_theme_font_override("font", font)
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
 	if outline_size > 0:
 		label.add_theme_color_override("font_outline_color", outline)
 		label.add_theme_constant_override("outline_size", outline_size)
 	return label
+
+
+## Shrinks a label's font until its text fits its width (long names on
+## the podium), down to min_size; past that the text is trimmed with "...".
+func _fit_text(label: Label, max_size: int, min_size: int) -> void:
+	var font := label.get_theme_font("font")
+	var size := max_size
+	while size > min_size and font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > label.size.x:
+		size -= 1
+	label.add_theme_font_size_override("font_size", size)
 
 
 ## 92430 -> "92,430"
