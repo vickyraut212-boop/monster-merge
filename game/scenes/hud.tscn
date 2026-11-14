@@ -10,20 +10,9 @@
 [ext_resource type="Texture2D" path="res://assets/ui/powerup_battery.png" id="8_battery"]
 [ext_resource type="Texture2D" path="res://assets/ui/next_backing.png" id="9_next_backing"]
 [ext_resource type="Script" path="res://scripts/power_up_panel.gd" id="10_panel"]
+[ext_resource type="Texture2D" path="res://assets/ui/trophy_button.png" id="11_trophy"]
 [ext_resource type="PackedScene" path="res://scenes/leaderboard.tscn" id="11_leaderboard"]
 [ext_resource type="Script" path="res://scripts/game_over_panel.gd" id="12_game_over"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_trophy"]
-bg_color = Color(0.36, 0.26, 0.52, 0.95)
-border_width_left = 4
-border_width_top = 4
-border_width_right = 4
-border_width_bottom = 4
-border_color = Color(1, 0.82, 0.3, 1)
-corner_radius_top_left = 26
-corner_radius_top_right = 26
-corner_radius_bottom_right = 26
-corner_radius_bottom_left = 26
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_next"]
 bg_color = Color(0.22, 0.16, 0.46, 0.72)
@@ -53,18 +42,15 @@ texture_normal = ExtResource("3_settings_button")
 ignore_texture_size = true
 stretch_mode = 5
 
-[node name="TrophyButton" type="Button" parent="."]
-offset_left = 24.0
-offset_top = 124.0
-offset_right = 104.0
-offset_bottom = 204.0
-pivot_offset = Vector2(40, 40)
-theme_override_colors/font_color = Color(1, 0.82, 0.3, 1)
-theme_override_font_sizes/font_size = 26
-theme_override_styles/normal = SubResource("StyleBoxFlat_trophy")
-theme_override_styles/hover = SubResource("StyleBoxFlat_trophy")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_trophy")
-text = "TOP"
+[node name="TrophyButton" type="TextureButton" parent="."]
+offset_left = 26.0
+offset_top = 126.0
+offset_right = 110.0
+offset_bottom = 210.0
+pivot_offset = Vector2(42, 42)
+texture_normal = ExtResource("11_trophy")
+ignore_texture_size = true
+stretch_mode = 5
 
 [node name="ScorePanel" type="TextureRect" parent="."]
 offset_left = 190.0

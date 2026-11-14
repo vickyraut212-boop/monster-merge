@@ -13,11 +13,31 @@ extends Node2D
 ## Inspector; "Ship Width" sets how wide it appears. Clearing "Ship Texture"
 ## falls back to the UFO drawn in code (see _draw_ship).
 ##
-## DROP ORDER
+## DROP ORDER (controlled randomness)
 ## The very first drop of the game is always Tier 1. After that, every drop is
-## a random pick between Tier 1 and TierData.MAX_DROP_TIER (Tier 3).
-## Tiers 4 to 8 never drop; they are only made by merging.
-## The rule lives in _pick_tier() below.
+## a weighted random pick between Tier 1 and TierData.MAX_DROP_TIER (Tier 4),
+## with a few fairness rules so the order never feels unfair or repetitive:
+##   - the same tier never comes more than twice in a row, and Tier 4 never
+##     twice in a row;
+##   - after three big drops (Tier 3 or 4) in a row, the next one is small;
+##   - while the pile reaches close to the danger line, only Tier 1 or 2 drop,
+##     so there is always somewhere sensible to put the monster.
+## Tiers 5 to 8 never drop; they are only made by merging.
+## The rules live in _pick_tier() below.
+##
+## DIFFICULTY
+## difficulty goes from 0 to 1. It stays at 0 for the first WARMUP_TIME
+## seconds of play, then rises with the score (reaching 1 at FULL_SCORE), but
+## never faster than over RAMP_TIME seconds. As it rises:
+##   - bigger tiers drop a little more often (DROP_WEIGHTS_EASY -> _HARD);
+##   - monsters leave the beam faster (DROP_SPEED);
+##   - the ship reloads a bit sooner (cooldown -> MIN_COOLDOWN);
+##   - the beam sways gently from side to side (SWAY_MAX px), so where you
+##     release matters; the aim line always shows the true drop point;
+##   - the ship gets impatient: if you wait longer than PATIENCE seconds it
+##     drops by itself. A ring round the held monster counts down the last
+##     PATIENCE_WARNING seconds. PATIENCE is 0 (off) until the warm-up ends.
+## All of these numbers are just below.
 
 signal dropped(tier: int, at: Vector2)
 signal next_changed(tier: int)
@@ -60,9 +80,44 @@ signal next_changed(tier: int)
 @export var beam_color := Color(0.7, 1.0, 0.88, 0.5)
 @export var sparkle_color := Color(1.0, 0.92, 0.3)
 
+## Seconds of play before difficulty starts to rise.
+const WARMUP_TIME := 25.0
+## Score at which difficulty reaches its maximum...
+const FULL_SCORE := 3000.0
+## ...but it never climbs from 0 to 1 faster than this many seconds.
+const RAMP_TIME := 180.0
+## Chance weights for Tier 1, 2, 3, 4 at difficulty 0 and at difficulty 1.
+const DROP_WEIGHTS_EASY: Array[float] = [34.0, 30.0, 24.0, 12.0]
+const DROP_WEIGHTS_HARD: Array[float] = [24.0, 26.0, 27.0, 23.0]
+## Downward speed a monster leaves the beam with (px/s), easy -> hard.
+const DROP_SPEED := Vector2(0.0, 420.0)
+## Shortest gap between drops at full difficulty (the export cooldown is the
+## gap at difficulty 0).
+const MIN_COOLDOWN := 0.42
+## How far the beam sways sideways at full difficulty (px).
+const SWAY_MAX := 16.0
+## Seconds the ship waits before dropping by itself, just after the warm-up
+## (x) and at full difficulty (y).
+const PATIENCE := Vector2(9.0, 5.0)
+## The countdown ring shows for this many seconds before an auto-drop.
+const PATIENCE_WARNING := 2.5
+## If the top of the pile is closer than this to the danger line, only
+## Tier 1 or 2 are picked.
+const CROWDED_MARGIN := 150.0
+
 var enabled := true
 var current_tier := 1
 var next_tier := 1
+## 0 = opening (easy) ... 1 = hardest. See DIFFICULTY above.
+var difficulty := 0.0
+## Score so far (main.gd keeps it up to date).
+var score := 0
+
+var _play_time := 0.0
+var _history: Array[int] = []
+var _idle := 0.0
+var _sway := 0.0
+var _ship_lift := 0.0
 
 var _jar: Jar
 var _held: BlinkSprite
@@ -89,9 +144,82 @@ func setup(jar: Jar) -> void:
 	next_changed.emit(next_tier)
 
 
-## Every drop after the first: random Tier 1, 2 or 3.
+## Every drop after the first: a weighted pick from Tier 1 to MAX_DROP_TIER,
+## with the fairness rules described at the top of this file.
 func _pick_tier() -> int:
-	return randi_range(1, TierData.MAX_DROP_TIER)
+	var count := TierData.MAX_DROP_TIER
+	var weights: Array[float] = []
+	for i in count:
+		var easy: float = DROP_WEIGHTS_EASY[mini(i, DROP_WEIGHTS_EASY.size() - 1)]
+		var hard: float = DROP_WEIGHTS_HARD[mini(i, DROP_WEIGHTS_HARD.size() - 1)]
+		weights.append(lerpf(easy, hard, difficulty))
+	# The tier that will be dropped just before this one counts as history too.
+	var recent: Array[int] = _history.duplicate()
+	recent.append(current_tier)
+	var n := recent.size()
+	# No tier more than twice in a row.
+	if n >= 2 and recent[n - 1] == recent[n - 2]:
+		weights[recent[n - 1] - 1] = 0.0
+	# Never two Tier 4s (the biggest drop) back to back.
+	if recent[n - 1] == count:
+		weights[count - 1] = 0.0
+	# After three big drops in a row, give a small one.
+	if n >= 3 and recent[n - 1] >= 3 and recent[n - 2] >= 3 and recent[n - 3] >= 3:
+		for i in range(2, count):
+			weights[i] = 0.0
+	# Pile close to the top: only small monsters, so there is always room.
+	if _is_crowded():
+		for i in range(2, count):
+			weights[i] = 0.0
+	var total := 0.0
+	for w in weights:
+		total += w
+	if total <= 0.0:
+		return 1
+	var roll := randf() * total
+	for i in count:
+		roll -= weights[i]
+		if roll < 0.0:
+			return i + 1
+	return 1
+
+
+## True while a settled monster reaches within CROWDED_MARGIN of the danger
+## line (monsters still falling from the ship don't count).
+func _is_crowded() -> bool:
+	if _jar == null:
+		return false
+	var limit := _jar.inner_top + CROWDED_MARGIN
+	for node in get_tree().get_nodes_in_group("monsters"):
+		var monster := node as Monster
+		if monster == null or monster.linear_velocity.y > 120.0:
+			continue
+		if monster.global_position.y - TierData.get_radius(monster.tier) < limit:
+			return true
+	return false
+
+
+func _update_difficulty(delta: float) -> void:
+	_play_time += delta
+	if _play_time < WARMUP_TIME:
+		difficulty = 0.0
+		return
+	var by_score := clampf(score / FULL_SCORE, 0.0, 1.0)
+	var by_time := clampf((_play_time - WARMUP_TIME) / RAMP_TIME, 0.0, 1.0)
+	# Smoothstep so the change creeps in rather than jumping.
+	difficulty = smoothstep(0.0, 1.0, minf(by_score, by_time))
+
+
+## Seconds before the ship drops by itself (0 = never, during the warm-up).
+func _patience() -> float:
+	if _play_time < WARMUP_TIME:
+		return 0.0
+	return lerpf(PATIENCE.x, PATIENCE.y, difficulty)
+
+
+## The beam's current sideways sway (px).
+func _sway_offset() -> float:
+	return sin(_time * 1.7) * 0.7 * SWAY_MAX * difficulty + sin(_time * 2.9 + 1.3) * 0.3 * SWAY_MAX * difficulty
 
 
 func _process(delta: float) -> void:
@@ -100,8 +228,19 @@ func _process(delta: float) -> void:
 	_time += delta
 	if enabled:
 		_target_x = get_global_mouse_position().x
-	# Smoothly glide towards the pointer.
+		_update_difficulty(delta)
+		# The ship gets impatient once the warm-up is over.
+		if _cooldown_left <= 0.0 and _patience() > 0.0:
+			_idle += delta
+			if _idle >= _patience():
+				_drop()
+	# Smoothly glide towards the pointer (plus the gentle beam sway).
+	_sway = _sway_offset()
 	position.x = lerpf(position.x, _clamped_target_x(), 1.0 - exp(-follow_speed * delta))
+	# Big held monsters push the ship up a little so it never overlaps them.
+	var lift := maxf(0.0, TierData.get_radius(current_tier) + 52.0 - ship_height_above)
+	_ship_lift = lerpf(_ship_lift, lift, 1.0 - exp(-10.0 * delta))
+	_held.position.x = _drop_point().x - global_position.x
 	# Lean the ship into its movement, like it is flying sideways.
 	var speed := (position.x - _last_x) / maxf(delta, 0.0001)
 	_last_x = position.x
@@ -128,15 +267,33 @@ func _drop() -> void:
 	if _cooldown_left > 0.0:
 		return
 	position.x = _clamped_target_x()
-	dropped.emit(current_tier, global_position)
+	dropped.emit(current_tier, _drop_point())
 	GameAudio.play("drop", randf_range(0.95, 1.05))
 
+	_history.append(current_tier)
+	if _history.size() > 4:
+		_history.pop_front()
+	_idle = 0.0
 	current_tier = next_tier
 	next_tier = _pick_tier()
 	next_changed.emit(next_tier)
 	_refresh_held()
 	_held.visible = false
-	_cooldown_left = cooldown
+	_cooldown_left = lerpf(cooldown, MIN_COOLDOWN, difficulty)
+
+
+## Where the held monster is right now (the ship's spot plus the beam sway,
+## kept inside the jar walls).
+func _drop_point() -> Vector2:
+	var inner := _jar.get_inner_rect()
+	var radius := TierData.get_radius(current_tier)
+	var x := clampf(global_position.x + _sway, inner.position.x + radius, inner.end.x - radius)
+	return Vector2(x, global_position.y)
+
+
+## Downward speed for a monster leaving the beam right now.
+func drop_speed() -> float:
+	return lerpf(DROP_SPEED.x, DROP_SPEED.y, difficulty)
 
 
 ## Pauses dropping while a power-up waits for the player to tap a monster
@@ -145,6 +302,7 @@ func set_paused(paused: bool) -> void:
 	if _held == null or (paused == not enabled):
 		return
 	enabled = not paused
+	_idle = 0.0  # the patience countdown starts again after a power-up
 	if enabled and _cooldown_left <= 0.0:
 		_held.visible = true
 
@@ -168,12 +326,14 @@ func _clamped_target_x() -> float:
 func _draw() -> void:
 	if _jar == null:
 		return
-	var ship_y := -ship_height_above + sin(_time * 3.0) * 3.0  # gentle hover
+	var ship_y := -ship_height_above - _ship_lift + sin(_time * 3.0) * 3.0  # gentle hover
+	var held_x := _held.position.x
 	if _held.visible:
 		var radius := TierData.get_radius(current_tier)
 		var bottom := _jar.get_floor_y() - position.y
-		draw_dashed_line(Vector2(0, radius + 6.0), Vector2(0, bottom), aim_line_color, 3.0, 14.0)
-		_draw_beam(ship_y, radius)
+		draw_dashed_line(Vector2(held_x, radius + 6.0), Vector2(held_x, bottom), aim_line_color, 3.0, 14.0)
+		_draw_beam(ship_y, radius, held_x)
+		_draw_patience(radius, held_x)
 	# Everything below is drawn around the ship's centre, tilted by its lean.
 	draw_set_transform(Vector2(0, ship_y), _lean, Vector2.ONE)
 	_draw_ship()
@@ -181,15 +341,15 @@ func _draw() -> void:
 
 
 ## Tractor beam shining down from the ship around the held monster.
-func _draw_beam(ship_y: float, radius: float) -> void:
+func _draw_beam(ship_y: float, radius: float, held_x := 0.0) -> void:
 	var top_y := ship_y + ship_width * 0.17
 	var top_half := ship_width * 0.13
 	var bottom_y := radius + 14.0
 	var bottom_half := radius + 18.0
 	var left_top := Vector2(-top_half, top_y)
 	var right_top := Vector2(top_half, top_y)
-	var left_bottom := Vector2(-bottom_half, bottom_y)
-	var right_bottom := Vector2(bottom_half, bottom_y)
+	var left_bottom := Vector2(held_x - bottom_half, bottom_y)
+	var right_bottom := Vector2(held_x + bottom_half, bottom_y)
 	# Soft glow: full colour at the ship, fading to almost clear at the bottom,
 	# so it reads as light rather than a solid grey shape.
 	var faded := Color(beam_color, beam_color.a * 0.08)
@@ -204,6 +364,24 @@ func _draw_beam(ship_y: float, radius: float) -> void:
 		var a := left_top.lerp(right_top, 0.5 + k * 0.5).lerp(left_bottom.lerp(right_bottom, 0.5 + k * 0.5), t * 0.6)
 		var b := left_top.lerp(right_top, 0.5 + k * 0.5).lerp(left_bottom.lerp(right_bottom, 0.5 + k * 0.5), t * 0.6 + 0.15)
 		draw_line(a, b, Color(1, 1, 1, 0.45 * (1.0 - t)), 2.0, true)
+
+
+## Countdown ring round the held monster in the last PATIENCE_WARNING seconds
+## before the ship drops by itself.
+func _draw_patience(radius: float, held_x: float) -> void:
+	var patience := _patience()
+	if patience <= 0.0 or not enabled:
+		return
+	var left := patience - _idle
+	if left > PATIENCE_WARNING:
+		return
+	var t := clampf(left / PATIENCE_WARNING, 0.0, 1.0)
+	var fade := clampf((PATIENCE_WARNING - left) / 0.3, 0.0, 1.0)
+	var color := Color(1.0, 0.85, 0.4).lerp(Color(1.0, 0.36, 0.45), 1.0 - t)
+	var center := Vector2(held_x, 0)
+	var r := radius + 10.0
+	draw_arc(center, r, 0, TAU, 48, Color(0.1, 0.05, 0.2, 0.35 * fade), 7.0, true)
+	draw_arc(center, r, -PI / 2.0, -PI / 2.0 + TAU * t, 48, Color(color, 0.95 * fade), 4.0, true)
 
 
 ## The UFO, drawn around (0, 0) = the middle of the saucer.

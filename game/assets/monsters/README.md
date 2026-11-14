@@ -11,7 +11,9 @@ Each tier has an eyes-open sprite plus 3 blink frames:
 
 Tier 1 is the tiny dot, Tier 8 the big boss.
 
-Tiers 6, 7 and 8 (the purple three-eyed monster, the mint five-eyed monster and the orange boss) use the final reference art. Their blink frames have no hand-made versions: `tier_6/7/8_blink_1..3.png` were generated from the eyes-open sprite by painting skin-coloured eyelids over each eye, in the same style as the other tiers. If you redraw one of these sprites, regenerate its blink frames to match.
+Tier 6 (red three-eyed monster) and Tier 7 (lavender four-eyed monster) are vicky's approved art, used exactly as supplied ("Tire 6.png" and "Tire 7.png", 2026-11-14): `tier_6.png` is the supplied file byte for byte, and `tier_7.png` is the supplied file with only its fully transparent margin cropped off (every remaining pixel is unchanged), so the sprite width matches the collider like the other tiers. They are larger than 768px, so their `.import` files set `process/size_limit=768` and Godot downsizes them on import. Do not recolour, outline or redraw them. Their blink frames (`tier_6/7_blink_1..3.png`) are made by `python3 tools/blink_frames.py` (repo root): copies of the supplied art with soft skin-coloured eyelids painted over every eye (all three on Tier 6, all four on Tier 7), half-closed, closed and half-open, in the same style as Tier 8. Nothing outside the eyes changes. The eye positions are listed at the top of that script; the blink `.import` files use the same `size_limit=768` as the sprites.
+
+Tier 8 (the orange boss) uses the final reference art. Its blink frames have no hand-made versions: `tier_8_blink_1..3.png` were generated from the eyes-open sprite by painting skin-coloured eyelids over each eye.
 
 Tips:
 - Transparent background, monster centred, cropped tight, resized to 768px max.
@@ -21,4 +23,4 @@ Tips:
 - Sizes follow `docs/size_chart.png`; sizes and points per tier live in `scripts/tier_data.gd`.
 - Blink speed and timing live in `scripts/blink_sprite.gd`.
 
-Colours: Tier 1 was recoloured electric fuchsia (about #F241E3) so it stands out against the purple space background. Only the body colour changed: each pixel keeps its own shading, with slightly stronger gloss and shadow and a soft rim light on the top-left edges. Its blink frames got exactly the same treatment. Tiers 7 and 8 are the final reference art, unchanged. Tier 6 is its reference art with the same colours made to pop against the background: about 20% more saturation, more contrast and brightness on the body, a soft gloss streak on the left side, and a light lavender edge around the whole silhouette (strongest on the top left). Its blink frames were regenerated from that version.
+Colours: Tier 1 was recoloured electric fuchsia (about #F241E3) so it stands out against the purple space background. Only the body colour changed: each pixel keeps its own shading, with slightly stronger gloss and shadow and a soft rim light on the top-left edges. Its blink frames got exactly the same treatment. Tier 8 is the final reference art, unchanged.

@@ -26,11 +26,11 @@ extends CanvasLayer
 ## leaderboard, which refreshes itself once the new score has landed.
 ##
 ## LEADERBOARD
-## The "TOP" button under the settings button and the Leaderboard button on
+## The trophy button under the settings button and the Leaderboard button on
 ## the game-over screen both open the online leaderboard pop-up (Leaderboard,
 ## scenes/leaderboard.tscn).
-## The TOP button is a plain placeholder button; give it art later by swapping
-## it for a TextureButton with the same name.
+## The trophy button (assets/ui/trophy_button.png, vicky's art) sits just
+## under the settings button, the same size.
 
 signal play_again_pressed
 ## Restart button in the settings pop-up.
@@ -54,7 +54,7 @@ signal power_up_pressed(power_up: String)
 @onready var _score_label: Label = $ScorePanel/ScoreLabel
 @onready var _best_label: Label = $ScorePanel/BestLabel
 @onready var _game_over: GameOverPanel = $GameOver
-@onready var _trophy_button: Button = $TrophyButton
+@onready var _trophy_button: TextureButton = $TrophyButton
 @onready var _leaderboard: LeaderboardPopup = $Leaderboard
 
 
@@ -86,9 +86,14 @@ func get_power_up_button(power_up: String) -> TextureButton:
 	return _power_ups.get_node_or_null(power_up.capitalize()) as TextureButton
 
 
-## Shows how many uses a power-up has left in the round bubble at the top
-## right of its button. At 0 the button and bubble grey out.
-func set_power_up_count(power_up: String, count: int) -> void:
+## Shows whether a power-up is ready.
+## Ready: full-colour icon with a pink "1" bubble at its top right (each
+## power-up holds one use).
+## Cooling down: the icon eases to a dimmed, desaturated look, a thin ring
+## round the button fills clockwise as the cooldown runs out, and a small
+## pill under the button shows the time left ("2:59"). Nothing covers the
+## icon itself.
+func set_power_up_cooldown(power_up: String, left: float, total: float) -> void:
 	var button := get_power_up_button(power_up)
 	if button == null:
 		return
@@ -96,11 +101,77 @@ func set_power_up_count(power_up: String, count: int) -> void:
 	if badge == null:
 		badge = _make_count_badge()
 		button.add_child(badge)
-	(badge.get_node("Label") as Label).text = str(count)
-	var empty := count <= 0
-	(badge.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = \
-			Color(0.45, 0.42, 0.55) if empty else Color(1.0, 0.32, 0.52)
-	button.self_modulate = Color(0.5, 0.5, 0.58) if empty else Color.WHITE
+		(badge.get_node("Label") as Label).text = "1"
+	var overlay := button.get_node_or_null("Cooldown") as CooldownOverlay
+	if overlay == null:
+		overlay = CooldownOverlay.new()
+		overlay.name = "Cooldown"
+		button.add_child(overlay)
+		var dim := ShaderMaterial.new()
+		dim.shader = _dim_shader()
+		dim.set_shader_parameter("amount", 0.0)
+		button.material = dim
+	var cooling := left > 0.0
+	badge.visible = not cooling
+	overlay.visible = cooling
+	if cooling:
+		overlay.set_time(left, total)
+	var was_cooling: bool = button.get_meta("cooling", false)
+	if cooling != was_cooling:
+		button.set_meta("cooling", cooling)
+		_tween_dim(button, 1.0 if cooling else 0.0, 0.25 if cooling else 0.45)
+
+
+static var _dim_shader_cache: Shader
+
+## Greys out and darkens the icon by `amount` (0 = full colour, 1 = dimmed).
+static func _dim_shader() -> Shader:
+	if _dim_shader_cache == null:
+		_dim_shader_cache = Shader.new()
+		_dim_shader_cache.code = """
+shader_type canvas_item;
+uniform float amount = 0.0;
+void fragment() {
+	vec4 c = COLOR;
+	float grey = dot(c.rgb, vec3(0.3, 0.55, 0.15));
+	vec3 muted = mix(vec3(grey), vec3(0.62, 0.56, 0.78) * grey * 1.25, 0.35);
+	c.rgb = mix(c.rgb, muted * 0.72, amount * 0.85);
+	COLOR = c;
+}
+"""
+	return _dim_shader_cache
+
+
+func _tween_dim(button: TextureButton, to: float, time: float) -> void:
+	var dim := button.material as ShaderMaterial
+	if dim == null:
+		return
+	var from := float(dim.get_shader_parameter("amount") if dim.get_shader_parameter("amount") != null else 0.0)
+	button.create_tween().tween_method(func(v: float) -> void: dim.set_shader_parameter("amount", v),
+			from, to, time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+## "2:59" for a number of seconds (rounded up, so it never shows 0:00 early).
+static func format_cooldown(seconds: float) -> String:
+	var s := int(ceil(seconds))
+	return "%d:%02d" % [s / 60, s % 60]
+
+
+## A power-up's cooldown just ended: the icon eases back to full colour (see
+## set_power_up_cooldown), a soft ring of light pulses out once, the button
+## gives one gentle bounce and its "1" bubble pops in. No looping flash.
+func flash_power_up_ready(power_up: String) -> void:
+	var button := get_power_up_button(power_up)
+	if button == null:
+		return
+	pop_power_up_count(power_up)
+	button.pivot_offset = button.size / 2.0
+	var t := button.create_tween()
+	t.tween_property(button, "scale", Vector2(1.08, 1.08), 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	t.tween_property(button, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	var pulse := ReadyPulse.new()
+	button.add_child(pulse)
+	button.move_child(pulse, 0)
 
 
 ## Little bounce on a power-up's count bubble (when it gains a use).
@@ -134,6 +205,7 @@ func _make_count_badge() -> Panel:
 	badge.position = Vector2(84, -2)
 	badge.pivot_offset = badge.size / 2.0
 	var style := StyleBoxFlat.new()
+	style.bg_color = Color(1.0, 0.32, 0.52)
 	style.set_corner_radius_all(20)
 	style.set_border_width_all(3)
 	style.border_color = Color.WHITE
@@ -276,3 +348,99 @@ func set_game_over_best(best: int) -> void:
 func set_rank_state(state: GameOverPanel.RankState, rank := 0, total := 0) -> void:
 	_game_over.set_rank_state(state, rank, total)
 	_leaderboard.set_score_pending(state == GameOverPanel.RankState.PENDING)
+
+
+## Cooldown look on a power-up button: a thin track round the button with a
+## soft gold arc that fills clockwise from 12 o'clock as the cooldown runs out
+## (it is full the moment the power-up is ready), and a small rounded time
+## pill tucked under the button.
+class CooldownOverlay extends Control:
+	const TRACK := Color(0.16, 0.08, 0.32, 0.55)
+	const FILL := Color(1.0, 0.82, 0.42)
+	var _fraction := 0.0
+	var _pill: PanelContainer
+	var _label: Label
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		resized.connect(_layout)
+		_pill = PanelContainer.new()
+		_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.2, 0.11, 0.4, 0.92)
+		style.set_corner_radius_all(12)
+		style.border_color = Color(0.62, 0.5, 0.95, 0.7)
+		style.set_border_width_all(2)
+		style.shadow_color = Color(0.06, 0.02, 0.14, 0.35)
+		style.shadow_size = 3
+		style.shadow_offset = Vector2(0, 2)
+		style.content_margin_left = 9
+		style.content_margin_right = 9
+		style.content_margin_top = 0
+		style.content_margin_bottom = 1
+		style.anti_aliasing = true
+		_pill.add_theme_stylebox_override("panel", style)
+		_label = Label.new()
+		_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_label.add_theme_font_size_override("font_size", 17)
+		_label.add_theme_color_override("font_color", Color(1.0, 0.93, 0.8))
+		var font := load("res://assets/fonts/Fredoka.ttf") as Font
+		if font:
+			_label.add_theme_font_override("font", font)
+		_pill.add_child(_label)
+		add_child(_pill)
+		_layout()
+
+	func _layout() -> void:
+		if _pill == null:
+			return
+		_pill.reset_size()
+		_pill.position = Vector2((size.x - _pill.size.x) / 2.0, size.y - _pill.size.y * 0.35)
+
+	func set_time(left: float, total: float) -> void:
+		var f := 1.0 - clampf(left / maxf(total, 0.001), 0.0, 1.0)
+		var text := Hud.format_cooldown(left)
+		if _label and _label.text != text:
+			_label.text = text
+			_layout()
+		if absf(f - _fraction) > 0.0005:
+			_fraction = f
+			queue_redraw()
+
+	func _draw() -> void:
+		var c := size / 2.0
+		var r := minf(size.x, size.y) * 0.5 + 1.0
+		draw_arc(c, r, 0, TAU, 72, TRACK, 7.0, true)
+		if _fraction <= 0.002:
+			return
+		var start := -PI / 2.0
+		var end := start + TAU * _fraction
+		draw_arc(c, r, start, end, maxi(4, int(72 * _fraction)), Color(FILL, 0.3), 9.0, true)
+		draw_arc(c, r, start, end, maxi(4, int(72 * _fraction)), FILL, 4.5, true)
+		# Rounded head on the moving end.
+		draw_circle(c + Vector2.from_angle(end) * r, 3.4, Color(1.0, 0.95, 0.8))
+
+
+## One soft ring of light that swells out from a power-up button and fades
+## (when its cooldown ends). Removes itself.
+class ReadyPulse extends Control:
+	var _t := 0.0
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var tween := create_tween()
+		tween.tween_method(func(v: float) -> void:
+			_t = v
+			queue_redraw(), 0.0, 1.0, 0.7).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tween.tween_callback(queue_free)
+
+	func _draw() -> void:
+		var c := size / 2.0
+		var r := minf(size.x, size.y) * 0.5
+		var a := 1.0 - _t
+		for k in 3:
+			draw_circle(c, r * (0.92 + _t * 0.3) + k * 6.0, Color(1.0, 0.88, 0.55, 0.12 * a))
+		draw_arc(c, r * (1.0 + _t * 0.28), 0, TAU, 64, Color(1.0, 0.92, 0.65, 0.8 * a), 3.0 * a + 0.5, true)

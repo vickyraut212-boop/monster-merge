@@ -81,7 +81,9 @@ func _ready() -> void:
 
 func _on_dropped(tier: int, at: Vector2) -> void:
 	_drops += 1
-	_spawn_monster(tier, at)
+	var monster := _spawn_monster(tier, at)
+	# Later in the game monsters leave the beam faster (see dropper.gd).
+	monster.linear_velocity = Vector2(0, dropper.drop_speed())
 
 
 func _spawn_monster(tier: int, at: Vector2) -> Monster:
@@ -146,9 +148,9 @@ func _merge(a: Monster, b: Monster) -> void:
 
 func _add_score(points: int) -> void:
 	score += points
+	dropper.score = score
 	hud.set_score(score)
 	hud.set_best(maxi(best, score))
-	_power_ups.on_score(score)
 
 
 ## Adds this merge to the chain (or starts a new one if the last merge was

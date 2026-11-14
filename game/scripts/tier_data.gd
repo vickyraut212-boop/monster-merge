@@ -15,15 +15,17 @@ extends Node
 ##   T1 0.119  T2 0.195  T3 0.289  T4 0.412  T5 0.471  T6 0.658  T7 0.826  T8 1.000
 ## BOSS_RADIUS sets the overall scale; every other tier keeps its chart ratio.
 ## To make everything bigger or smaller, change BOSS_RADIUS only.
+## It was 130; it is 10% bigger (143) so the jar fills a little faster and
+## placement matters more. The jar still fits a Tier 8 boss with room to spare.
 
-const BOSS_RADIUS := 130.0
+const BOSS_RADIUS := 143.0
 
 const SIZE_CHART_RATIO: Array[float] = [0.119, 0.195, 0.289, 0.412, 0.471, 0.658, 0.826, 1.0]
 
 ## Readability boost for the smallest tiers. At their pure chart size Tier 1
 ## (about 15 px) and Tier 2 (about 25 px) are too small to read their faces,
 ## and they are the monsters players see most. 1.0 = exact chart size.
-## Result: T1 22, T2 29, T3 38, T4 54, T5 61, T6 86, T7 107, T8 130 px radius.
+## Result: T1 25, T2 32, T3 41, T4 59, T5 67, T6 94, T7 118, T8 143 px radius.
 const READABILITY_BOOST: Array[float] = [1.45, 1.15, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
 const TIERS: Array[Dictionary] = [
@@ -32,14 +34,15 @@ const TIERS: Array[Dictionary] = [
 	{"name": "Tier 3",             "texture": "res://assets/monsters/tier_3.png", "points": 6,  "bonus": 0},
 	{"name": "Tier 4",             "texture": "res://assets/monsters/tier_4.png", "points": 10, "bonus": 10},
 	{"name": "Tier 5",             "texture": "res://assets/monsters/tier_5.png", "points": 15, "bonus": 20},
-	{"name": "Tier 6",             "texture": "res://assets/monsters/tier_6.png", "points": 21, "bonus": 30},
-	{"name": "Tier 7 - Slime",     "texture": "res://assets/monsters/tier_7.png", "points": 28, "bonus": 40},
+	{"name": "Tier 6 - Three Eyes", "texture": "res://assets/monsters/tier_6.png", "points": 21, "bonus": 30},
+	{"name": "Tier 7 - Four Eyes",  "texture": "res://assets/monsters/tier_7.png", "points": 28, "bonus": 40},
 	{"name": "Tier 8 - Big Boss",  "texture": "res://assets/monsters/tier_8.png", "points": 36, "bonus": 50},
 ]
 
-## Drops: the first drop is always Tier 1, then random Tier 1 to this tier.
-## Tiers above it (4 to 8) are only made by merging. See dropper.gd.
-const MAX_DROP_TIER := 3
+## Drops: the first drop is always Tier 1, then a controlled-random pick from
+## Tier 1 to this tier (see dropper.gd for the weights and fairness rules).
+## Tiers above it (5 to 8) are only made by merging.
+const MAX_DROP_TIER := 4
 
 ## Bonus for merging two Tier 8 bosses (they vanish).
 const BOSS_MERGE_BONUS := 100
