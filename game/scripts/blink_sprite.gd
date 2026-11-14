@@ -33,6 +33,12 @@ func set_tier(tier: int) -> void:
 	_wait = randf_range(0.3, BLINK_INTERVAL)
 
 
+## Blinks right away (used by the intro), then carries on its normal rhythm.
+func blink_now() -> void:
+	if not _frames.is_empty() and _frame < 0:
+		_show_frame(0)
+
+
 func _process(delta: float) -> void:
 	if _frames.is_empty():
 		return
