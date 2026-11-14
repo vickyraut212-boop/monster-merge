@@ -1,23 +1,26 @@
 class_name Intro
 extends CanvasLayer
-## Animated opening of the game: a grand arcade-style title reveal with one
-## lively monster.
+## Animated opening of the game: a grand arcade-style title reveal with the
+## four approved monsters.
 ##
 ##   A soft radiant glow and slowly turning light rays fade in
-##   -> the green two-eyed monster (Tier 5 art) springs up from the bottom
-##      edge of the screen, tumbling a little in the air, lands on its feet
-##      with a squash, bounces twice and settles, its body swaying over its
-##      planted feet, stepping its feet and blinking
-##   -> as it lands the Monster Merge title drops in with a springy overshoot,
-##      a bloom of light, twinkling sparkles and a light sweep across the
-##      letters; the monster gives a happy hop when the shine passes
-##   -> the monster hops away, the title floats off and gameplay fades in.
+##   -> the monsters arrive one after another, each with its own bounce:
+##        Tier 3 (pink, one eye)     hops in from the left edge
+##        Tier 5 (green, two eyes)   springs up from the bottom with a twist
+##        Tier 6 (red, three eyes)   somersaults in from the right edge
+##        Tier 7 (lavender, 4 eyes)  makes a big leap from the bottom and lands
+##                                   with a thump that makes the others hop
+##   -> the Monster Merge title drops in as the first monster lands, with a
+##      bloom of light and sparkles; a light sweep crosses it on the finale
+##   -> all four stay on screen, blinking and gently swaying, then a radiant
+##      energy pulse flashes out from them and gameplay appears behind it.
 ##
-## The movement follows vicky's reference (a bouncy character entrance with
-## rotation, squash and stretch and little leg movements); the monster is the
-## game's own art, only scaled. Its feet are the bottom strip of the same
-## picture, drawn as two separate pieces just behind the body so they can
-## step on their own.
+## Squash and stretch is done by a small shader (RUBBER_SHADER) that keeps the
+## monsters' volume: the body gets wider as it gets shorter and bulges most
+## round the middle, while the feet keep their shape, so the monsters stay
+## round and rubbery rather than flattening like a 2D picture. The art itself
+## is the exact game art (assets/monsters/tier_N.png and blink frames), only
+## scaled.
 ##
 ## It plays on top of the real game scene: the game's own space background
 ## stays visible the whole time, and the jar, ship and HUD are simply hidden
@@ -43,31 +46,25 @@ static var has_played := false
 @export var glow_color := Color(1.0, 0.7, 0.85, 1.0)
 @export var ray_color := Color(1.0, 0.9, 0.7, 0.15)
 
-@export_group("Monster")
-## The intro monster's tier art (Tier 5 = the green two-eyed monster).
-@export var hero_tier := 5
-## How wide it appears, in pixels.
-@export var hero_width := 290.0
-## Where its feet land.
-@export var hero_ground := Vector2(360, 1000)
-## Where it springs up from (below the bottom edge of the screen).
-@export var hero_start := Vector2(560, 1420)
-## Height of its leap above the ground.
-@export var jump_height := 330.0
+@export_group("Monsters")
+## The four monsters, in entrance order: tier, width in pixels, x of their
+## middle, y of their feet. Bigger ones stand a little further back.
+@export var cast: Array[Vector4] = [
+	Vector4(3, 135, 98, 1050),
+	Vector4(5, 172, 228, 1034),
+	Vector4(6, 196, 388, 1018),
+	Vector4(7, 236, 574, 1004),
+]
+## When each monster starts its entrance (seconds).
+@export var entrance_times: Array[float] = [0.3, 0.95, 1.6, 2.3]
 
 @export_group("Timing (seconds)")
-## When the monster leaps in.
-@export var leap_delay := 0.35
-## Pause on the finished picture before gameplay starts.
-@export var hold_time := 1.3
-## How long the hand-over to gameplay takes.
+## Pause on the finished picture before the transition.
+@export var hold_time := 1.1
+## Length of the energy-pulse transition into gameplay.
 @export var transition_time := 0.6
 
 const SCREEN := Vector2(720, 1280)
-## The bottom strip of the art that holds the feet (fraction of its height),
-## and where the left foot ends and the right one starts (fraction of width).
-const FEET_TOP := 0.9375
-const FEET_SPLIT := 0.507
 const SHINE_SHADER := """
 shader_type canvas_item;
 uniform float progress = -1.0;
@@ -77,6 +74,33 @@ void fragment() {
 	float d = abs((UV.x + (1.0 - UV.y) * 0.35) - progress);
 	float s = smoothstep(width, 0.0, d) * 0.6;
 	COLOR = vec4(mix(c.rgb, vec3(1.0, 0.98, 0.9), s), c.a);
+}
+"""
+## Volume-keeping squash and stretch around the feet. squash < 1 = shorter
+## and wider, > 1 = taller and slimmer; lean shears the top sideways. The
+## bottom FEET part keeps its size so feet never flatten.
+const RUBBER_SHADER := """
+shader_type canvas_item;
+uniform float squash = 1.0;
+uniform float lean = 0.0;
+uniform float feet = 0.2;
+varying vec4 tint;
+void vertex() {
+	tint = COLOR;
+}
+void fragment() {
+	float h = 1.0 - UV.y;
+	float s = mix(1.0, squash, smoothstep(0.0, feet, h));
+	float hs = h / s;
+	float widen = pow(squash, -0.45);
+	float w = mix(1.0, widen, smoothstep(feet * 0.15, feet * 1.5, hs));
+	w *= 1.0 + (widen - 1.0) * 0.25 * sin(3.14159 * clamp(hs, 0.0, 1.0));
+	vec2 src = vec2((UV.x - 0.5 - lean * hs) / w + 0.5, 1.0 - hs);
+	vec4 c = texture(TEXTURE, src);
+	if (src.x < 0.0 || src.x > 1.0 || src.y < 0.0 || src.y > 1.0) {
+		c = vec4(0.0);
+	}
+	COLOR = c * tint;
 }
 """
 
@@ -91,18 +115,8 @@ var _logo: Sprite2D
 var _glow: Sprite2D
 var _rays: Rays
 var _sparkles: Array[Node2D] = []
-## The monster: _hero sits at its feet; _lean squashes, tilts and sways it
-## around the feet; _body is the picture; _feet are the two feet pieces.
-var _hero: Node2D
-var _lean: Node2D
-var _body: BlinkSprite
-var _feet: Array[Sprite2D] = []
-var _feet_rest: Array[Vector2] = []
-var _hero_height := 0.0
-var _shadow: Shadow
-## 0 while the monster is in the air; fades to 1 once it has settled, which
-## turns on its idle sway, breathing and stepping.
-var _alive := 0.0
+var _monsters: Array[IntroMonster] = []
+var _flash: ColorRect
 var _tweens: Array[Tween] = []
 var _done := false
 var _time := 0.0
@@ -156,26 +170,6 @@ func _process(delta: float) -> void:
 		var star := _sparkles[i]
 		var k := sin(_time * (2.2 + i * 0.37) + i * 1.9)
 		star.scale = Vector2.ONE * pow(maxf(k, 0.0), 2.0) * star.get_meta("size", 1.0)
-	_animate_idle()
-
-
-## Once settled the monster feels alive: its body sways over its planted feet,
-## it breathes, and it shifts its weight from foot to foot.
-func _animate_idle() -> void:
-	if _body == null or _alive <= 0.0:
-		return
-	var a := _alive
-	var sway := sin(_time * 2.6)
-	_body.skew = sway * 0.07 * a
-	_body.position.x = sway * 3.0 * a
-	var breathe := 1.0 + sin(_time * 3.4) * 0.018 * a
-	_body.scale = _body.get_meta("base_scale") * Vector2(2.0 - breathe, breathe)
-	for i in _feet.size():
-		# Each foot lifts a little when the body leans away from it.
-		var side := -1.0 if i == 0 else 1.0
-		var lift := maxf(0.0, -sway * side) * 7.0 * a
-		_feet[i].position = _feet_rest[i] + Vector2(0, -lift)
-		_feet[i].rotation = -side * lift * 0.012
 
 
 # --- Building the picture -------------------------------------------------
@@ -200,7 +194,17 @@ func _build() -> void:
 	_glow.modulate.a = 0.0
 	add_child(_glow)
 
-	_build_hero()
+	# Monsters: shadows first, then the bodies from the back (biggest) to the
+	# front, so the smaller ones stand in front.
+	var shader := Shader.new()
+	shader.code = RUBBER_SHADER
+	for i in cast.size():
+		var m := IntroMonster.new()
+		m.setup(int(cast[i].x), cast[i].y, Vector2(cast[i].z, cast[i].w), shader)
+		_monsters.append(m)
+		add_child(m.shadow)
+	for i in range(cast.size() - 1, -1, -1):
+		add_child(_monsters[i])
 
 	# Logo last, so nothing passes in front of it.
 	_logo = Sprite2D.new()
@@ -209,9 +213,9 @@ func _build() -> void:
 	_logo.scale = Vector2.ZERO
 	_logo.modulate.a = 0.0
 	var shine := ShaderMaterial.new()
-	var shader := Shader.new()
-	shader.code = SHINE_SHADER
-	shine.shader = shader
+	var shine_shader := Shader.new()
+	shine_shader.code = SHINE_SHADER
+	shine.shader = shine_shader
 	_logo.material = shine
 	add_child(_logo)
 
@@ -230,57 +234,18 @@ func _build() -> void:
 		add_child(star)
 		_sparkles.append(star)
 
-
-func _build_hero() -> void:
-	_shadow = Shadow.new()
-	_shadow.position = hero_ground
-	_shadow.radius = hero_width * 0.44
-	_shadow.modulate.a = 0.0
-	add_child(_shadow)
-
-	_hero = Node2D.new()
-	_hero.position = hero_start
-	add_child(_hero)
-	_lean = Node2D.new()
-	_hero.add_child(_lean)
-
-	_body = BlinkSprite.new()
-	_body.set_tier(hero_tier)
-	var tex := _body.texture
-	var tex_size := tex.get_size()
-	var s := hero_width / tex_size.x
-	_hero_height = tex_size.y * s
-	# Feet: the bottom strip of the same art, in two pieces, just behind the body.
-	var feet_y := tex_size.y * FEET_TOP
-	var split := tex_size.x * FEET_SPLIT
-	for i in 2:
-		var foot := Sprite2D.new()
-		foot.texture = TierData.get_texture(hero_tier)
-		foot.region_enabled = true
-		foot.region_rect = Rect2(0.0, feet_y, split, tex_size.y - feet_y) if i == 0 \
-				else Rect2(split, feet_y, tex_size.x - split, tex_size.y - feet_y)
-		foot.centered = false
-		foot.offset = Vector2(-tex_size.x / 2.0 + (0.0 if i == 0 else split), -(tex_size.y - feet_y))
-		foot.scale = Vector2(s, s)
-		_lean.add_child(foot)
-		_feet.append(foot)
-		_feet_rest.append(Vector2.ZERO)
-	# Body: everything above the feet, standing on them.
-	_body.region_enabled = true
-	_body.region_rect = Rect2(0, 0, tex_size.x, feet_y)
-	_body.centered = false
-	_body.offset = Vector2(-tex_size.x / 2.0, -tex_size.y)
-	_body.scale = Vector2(s, s)
-	_body.set_meta("base_scale", Vector2(s, s))
-	_lean.add_child(_body)
+	# Full-screen flash for the energy-pulse transition (on top of everything).
+	_flash = ColorRect.new()
+	_flash.size = SCREEN
+	_flash.color = Color(1.0, 0.9, 0.97, 0.0)
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_flash)
 
 
 # --- The sequence ----------------------------------------------------------
 
 func _play() -> void:
 	var glow_scale := Vector2(960.0, 660.0) / 256.0
-
-	# Glow and rays fade in first, so the stage is lit when the monster arrives.
 	var g := _new_tween().set_parallel()
 	g.tween_property(_glow, "modulate:a", 0.55, 0.6).set_trans(Tween.TRANS_SINE)
 	g.tween_property(_glow, "scale", glow_scale, 0.8).from(glow_scale * 0.5) \
@@ -289,13 +254,22 @@ func _play() -> void:
 	g.tween_property(_rays, "scale", Vector2.ONE, 1.4).from(Vector2(0.4, 0.4)).set_delay(0.1) \
 			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
-	var landed := _hero_entrance()
+	for i in _monsters.size():
+		var m := _monsters[i]
+		m.visible = false
+		var show := _new_tween()
+		show.tween_interval(entrance_times[i])
+		show.tween_callback(func() -> void: m.visible = true)
+	var first_land := _hop_in_from_left(_monsters[0], entrance_times[0])
+	_spring_from_bottom(_monsters[1], entrance_times[1])
+	_somersault_from_right(_monsters[2], entrance_times[2])
+	var finale := _big_leap(_monsters[3], entrance_times[3])
 
-	# Title drops in just as the monster touches down.
-	var t := _new_tween()
-	t.tween_interval(landed - 0.32)
-	t.tween_property(_logo, "modulate:a", 1.0, 0.18)
+	# Title drops in as the first monster lands.
 	var logo_scale := Vector2.ONE * (logo_width / logo_texture.get_width())
+	var t := _new_tween()
+	t.tween_interval(first_land - 0.3)
+	t.tween_property(_logo, "modulate:a", 1.0, 0.18)
 	t.parallel().tween_property(_logo, "position", logo_center, 0.55) \
 			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	t.parallel().tween_property(_logo, "scale", logo_scale * 1.08, 0.5) \
@@ -306,91 +280,148 @@ func _play() -> void:
 	t.tween_property(_logo, "scale", logo_scale * 0.98, 0.14).set_trans(Tween.TRANS_SINE)
 	t.tween_property(_logo, "scale", logo_scale, 0.2).set_trans(Tween.TRANS_SINE)
 	t.tween_callback(_float_logo)
-	t.tween_interval(0.25)
-	# Light sweep across the letters, and the monster hops for joy with it.
-	t.tween_callback(_happy_hop)
-	t.tween_method(func(v: float) -> void: (_logo.material as ShaderMaterial).set_shader_parameter("progress", v),
+
+	# Finale: light sweep across the title as the last monster lands.
+	var f := _new_tween()
+	f.tween_interval(finale)
+	f.tween_method(func(v: float) -> void: (_logo.material as ShaderMaterial).set_shader_parameter("progress", v),
 			-0.3, 1.7, 0.75).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	t.tween_interval(hold_time)
-	t.tween_callback(_finish)
+	f.tween_interval(hold_time)
+	f.tween_callback(_finish)
 
 
-## The monster springs up from below the screen in an arc, tumbling a little,
-## lands on its feet with a squash, bounces twice (smaller each time) and
-## settles. Returns the time of the first touch-down.
-func _hero_entrance() -> float:
-	var ground := hero_ground
-	var apex := Vector2(lerpf(hero_start.x, ground.x, 0.6), ground.y - jump_height)
-	var rise := 0.42
-	var fall := 0.34
+# --- The four entrances ------------------------------------------------------
+# Each adds its moves to one tween and returns when the monster first touches
+# down. Landings share _land(): squash (keeping volume), a rebound stretch, a
+# soft elastic settle, then a blink and the idle sway.
+
+## Tier 3: two quick hops in from the left edge, leaning into each one.
+func _hop_in_from_left(m: IntroMonster, start: float) -> float:
+	var g := m.ground
+	m.position = Vector2(-90.0, g.y)
 	var t := _new_tween()
-	t.tween_interval(leap_delay)
-	_lean.rotation = 0.6
-	_lean.scale = Vector2(0.86, 1.18)
-	# Up: decelerating, stretched, unwinding its spin.
-	t.tween_property(_hero, "position:y", apex.y, rise).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	t.parallel().tween_property(_hero, "position:x", apex.x, rise).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	t.parallel().tween_property(_lean, "rotation", -0.18, rise).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	t.parallel().tween_property(_lean, "scale", Vector2(1.0, 1.0), rise).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	t.parallel().tween_property(_feet[0], "position", Vector2(-6, -10), rise)
-	t.parallel().tween_property(_feet[1], "position", Vector2(6, -4), rise)
-	# Down: accelerating, straightening up, feet reaching for the ground.
-	t.tween_property(_hero, "position:y", ground.y, fall).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	t.parallel().tween_property(_hero, "position:x", ground.x, fall).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	t.parallel().tween_property(_lean, "rotation", 0.05, fall).set_trans(Tween.TRANS_SINE)
-	t.parallel().tween_property(_lean, "scale", Vector2(0.92, 1.1), fall)
-	t.parallel().tween_property(_feet[0], "position", Vector2.ZERO, fall)
-	t.parallel().tween_property(_feet[1], "position", Vector2.ZERO, fall)
-	t.parallel().tween_property(_shadow, "modulate:a", 1.0, fall)
-	t.parallel().tween_property(_shadow, "scale", Vector2.ONE, fall).from(Vector2(0.3, 0.3))
-	t.tween_callback(_on_land.bind(1.0))
-	# Squash, then two shrinking bounces with alternating tilt.
-	t.tween_property(_lean, "scale", Vector2(1.26, 0.76), 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	t.parallel().tween_property(_lean, "rotation", 0.0, 0.08)
-	t.parallel().tween_property(_feet[0], "position", Vector2(-5, 0), 0.08)
-	t.parallel().tween_property(_feet[1], "position", Vector2(5, 0), 0.08)
-	for bounce in [[70.0, 0.2, -0.08], [22.0, 0.13, 0.05]]:
-		var h: float = bounce[0]
-		var d: float = bounce[1]
-		var tilt: float = bounce[2]
-		t.tween_property(_hero, "position:y", ground.y - h, d).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		t.parallel().tween_property(_lean, "scale", Vector2(0.9, 1.12), d * 0.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-		t.parallel().tween_property(_lean, "rotation", tilt, d)
-		t.parallel().tween_property(_feet[0], "position", Vector2(-2, -h * 0.1), d)
-		t.parallel().tween_property(_feet[1], "position", Vector2(2, -h * 0.05), d)
-		t.parallel().tween_property(_shadow, "scale", Vector2.ONE * (1.0 - h / 300.0), d)
-		t.tween_property(_hero, "position:y", ground.y, d).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		t.parallel().tween_property(_lean, "scale", Vector2(1.0, 1.0), d)
-		t.parallel().tween_property(_lean, "rotation", 0.0, d)
-		t.parallel().tween_property(_feet[0], "position", Vector2.ZERO, d)
-		t.parallel().tween_property(_feet[1], "position", Vector2.ZERO, d)
-		t.parallel().tween_property(_shadow, "scale", Vector2.ONE, d)
-		t.tween_callback(_on_land.bind(h / 120.0))
-		t.tween_property(_lean, "scale", Vector2(1.08 + h / 900.0, 0.93 - h / 1400.0), 0.06)
-	# Settle with a soft wobble, blink, and come alive.
-	t.tween_property(_lean, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-	t.tween_callback(_body.blink_now)
-	t.tween_method(func(v: float) -> void: _alive = v, 0.0, 1.0, 0.6).set_trans(Tween.TRANS_SINE)
-	return leap_delay + rise + fall
+	t.tween_interval(start)
+	var hops := [[Vector2(g.x - 70.0, g.y), 90.0, 0.3], [g, 120.0, 0.36]]
+	for k in hops.size():
+		var to: Vector2 = hops[k][0]
+		var height: float = hops[k][1]
+		var d: float = hops[k][2]
+		t.tween_property(m, "squash", 0.84, 0.06).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		t.tween_property(m, "position:x", to.x, d).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		t.parallel().tween_property(m, "lift", height, d * 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		t.parallel().tween_property(m, "lift", 0.0, d * 0.5).set_delay(d * 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		t.parallel().tween_property(m, "squash", 1.12, d * 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		t.parallel().tween_property(m, "squash", 1.0, d * 0.4).set_delay(d * 0.45)
+		t.parallel().tween_property(m, "lean", 0.1, d * 0.4)
+		t.parallel().tween_property(m, "lean", -0.04, d * 0.5).set_delay(d * 0.5)
+		if k < hops.size() - 1:
+			t.tween_callback(_thud.bind(0.3))
+			t.tween_property(m, "squash", 0.86, 0.07)
+	_land(t, m, 0.8, 0.0)
+	return start + 0.06 + 0.3 + 0.13 + 0.06 + 0.36
 
 
-## Happy hop when the light sweeps across the title.
-func _happy_hop() -> void:
-	var y := hero_ground.y
+## Tier 5: springs up from below the screen, twisting, and lands with a bounce.
+func _spring_from_bottom(m: IntroMonster, start: float) -> float:
+	var g := m.ground
+	m.position = Vector2(g.x + 90.0, g.y)
+	m.lift = -m.height - 160.0
+	m.spin = 0.7
+	m.squash = 1.18
 	var t := _new_tween()
-	t.tween_property(_lean, "scale", Vector2(1.12, 0.88), 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	t.tween_property(_hero, "position:y", y - 48.0, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	t.parallel().tween_property(_lean, "scale", Vector2(0.92, 1.1), 0.12)
-	t.parallel().tween_property(_lean, "rotation", 0.06, 0.18)
-	t.parallel().tween_property(_shadow, "scale", Vector2(0.85, 0.85), 0.18)
-	t.tween_property(_hero, "position:y", y, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	t.parallel().tween_property(_lean, "scale", Vector2.ONE, 0.16)
-	t.parallel().tween_property(_lean, "rotation", 0.0, 0.16)
-	t.parallel().tween_property(_shadow, "scale", Vector2.ONE, 0.16)
-	t.tween_callback(_on_land.bind(0.4))
-	t.tween_property(_lean, "scale", Vector2(1.08, 0.93), 0.06)
-	t.tween_property(_lean, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-	t.tween_callback(_body.blink_now)
+	t.tween_interval(start)
+	t.tween_property(m, "lift", 250.0, 0.42).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(m, "position:x", g.x, 0.7).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(m, "spin", -0.2, 0.42).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(m, "squash", 1.0, 0.42)
+	t.tween_property(m, "lift", 0.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	t.parallel().tween_property(m, "spin", 0.0, 0.3).set_trans(Tween.TRANS_SINE)
+	t.parallel().tween_property(m, "squash", 1.1, 0.3)
+	_land(t, m, 1.0, 60.0)
+	return start + 0.72
+
+
+## Tier 6: tumbles in from the right edge with a full somersault.
+func _somersault_from_right(m: IntroMonster, start: float) -> float:
+	var g := m.ground
+	m.position = Vector2(SCREEN.x + 140.0, g.y)
+	m.lift = 140.0
+	var t := _new_tween()
+	t.tween_interval(start)
+	t.tween_property(m, "position:x", g.x, 0.62).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(m, "lift", 260.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(m, "lift", 0.0, 0.32).set_delay(0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	t.parallel().tween_property(m, "spin", -TAU, 0.6).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(m, "squash", 0.9, 0.2)
+	t.parallel().tween_property(m, "squash", 1.1, 0.25).set_delay(0.37)
+	t.tween_callback(func() -> void: m.spin = 0.0)
+	_land(t, m, 1.0, 34.0, -0.09)
+	return start + 0.62
+
+
+## Tier 7: a big, slow leap from below the screen; its heavy landing makes
+## the other three hop.
+func _big_leap(m: IntroMonster, start: float) -> float:
+	var g := m.ground
+	m.position = Vector2(g.x - 40.0, g.y)
+	m.lift = -m.height - 160.0
+	m.squash = 1.2
+	var t := _new_tween()
+	t.tween_interval(start)
+	t.tween_property(m, "lift", 230.0, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(m, "position:x", g.x, 0.9).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(m, "squash", 0.96, 0.5).set_trans(Tween.TRANS_SINE)
+	t.parallel().tween_property(m, "spin", 0.12, 0.5)
+	t.tween_property(m, "lift", 0.0, 0.38).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	t.parallel().tween_property(m, "squash", 1.14, 0.38)
+	t.parallel().tween_property(m, "spin", 0.0, 0.38)
+	t.tween_callback(_ground_thump)
+	_land(t, m, 1.25, 28.0)
+	return start + 0.88
+
+
+## Shared landing: squash, rebound (with an optional small bounce of
+## `bounce` px), settle, blink, then come alive.
+func _land(t: Tween, m: IntroMonster, strength: float, bounce: float, tilt := 0.06) -> void:
+	t.tween_callback(_thud.bind(strength))
+	t.tween_property(m, "squash", 1.0 - 0.12 * strength, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(m, "lean", tilt, 0.08)
+	if bounce > 0.0:
+		var d := 0.12 + bounce / 600.0
+		t.tween_property(m, "lift", bounce, d).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		t.parallel().tween_property(m, "squash", 1.1, d * 0.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		t.parallel().tween_property(m, "lean", -tilt * 0.6, d)
+		t.tween_property(m, "lift", 0.0, d).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		t.parallel().tween_property(m, "squash", 1.0, d)
+		t.tween_callback(_thud.bind(strength * 0.4))
+		t.tween_property(m, "squash", 1.0 - 0.08 * strength, 0.07)
+		t.parallel().tween_property(m, "lean", 0.0, 0.07)
+	else:
+		t.tween_property(m, "squash", 1.08, 0.12).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		t.parallel().tween_property(m, "lean", -tilt * 0.5, 0.12)
+	t.tween_property(m, "squash", 1.0, 0.5).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(m, "lean", 0.0, 0.5).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	t.tween_callback(m.blink)
+	t.tween_property(m, "alive", 1.0, 0.6).set_trans(Tween.TRANS_SINE)
+
+
+## Tier 7's landing shakes the ground: the others give a little hop.
+func _ground_thump() -> void:
+	for i in _monsters.size() - 1:
+		var m := _monsters[i]
+		var t := _new_tween()
+		t.tween_interval(0.03 * i)
+		t.tween_property(m, "hop", 24.0 - i * 3.0, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		t.parallel().tween_property(m, "jiggle", 1.08, 0.08)
+		t.tween_property(m, "hop", 0.0, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		t.tween_property(m, "jiggle", 0.9, 0.06)
+		t.tween_property(m, "jiggle", 1.0, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+		t.tween_callback(m.blink)
+
+
+## Soft landing thud: harder landings sound deeper.
+func _thud(strength: float) -> void:
+	GameAudio.play("drop", lerpf(1.3, 0.75, clampf(strength, 0.0, 1.25) / 1.25))
 
 
 ## The title has landed: a bloom of light and the sparkles start to twinkle.
@@ -424,11 +455,6 @@ func _float_logo() -> void:
 	t.tween_property(_logo, "position:y", logo_center.y + 4.0, 1.4)
 
 
-## Soft landing thud: harder landings sound deeper and louder.
-func _on_land(strength: float) -> void:
-	GameAudio.play("drop", lerpf(1.25, 0.8, clampf(strength, 0.0, 1.0)))
-
-
 # --- Hand-over to gameplay -------------------------------------------------
 
 func _on_blocker_input(event: InputEvent) -> void:
@@ -438,42 +464,48 @@ func _on_blocker_input(event: InputEvent) -> void:
 		_finish()
 
 
+## Energy pulse: a bright ring bursts out from the monsters, the glow blooms
+## and a soft flash fills the screen; at its peak the intro picture is swapped
+## for the game, and the flash fades away to reveal gameplay. The monsters
+## stay where they are until the flash covers them.
 func _finish() -> void:
 	if _done:
 		return
 	_done = true
-	_alive = 0.0
 	for tween in _tweens:
 		if tween.is_valid():
 			tween.kill()
 	_tweens.clear()
 
-	var t := _new_tween().set_parallel()
-	# Logo floats up and fades away with its glow, rays and sparkles.
-	t.tween_property(_logo, "position:y", _logo.position.y - 70.0, transition_time) \
-			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	for item: CanvasItem in [_logo, _glow, _rays]:
-		t.tween_property(item, "modulate:a", 0.0, transition_time * 0.8) \
-				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	for star in _sparkles:
-		t.tween_property(star, "modulate:a", 0.0, 0.25)
-	# The monster gives a happy little hop and bounces away off the bottom.
-	t.tween_property(_lean, "scale", Vector2(1.14, 0.86), 0.08)
-	t.tween_property(_lean, "scale", Vector2(0.9, 1.12), 0.15).set_delay(0.08)
-	t.tween_property(_lean, "rotation", 0.0, 0.1)
-	t.tween_property(_lean, "skew", 0.0, 0.1)
-	t.tween_property(_hero, "position:y", _hero.position.y - 60.0, 0.18) \
-			.set_delay(0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	t.tween_property(_hero, "position:y", SCREEN.y + _hero_height + 40.0, 0.42) \
-			.set_delay(0.26).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	t.tween_property(_lean, "rotation", 0.25, 0.42).set_delay(0.26)
-	t.tween_property(_shadow, "modulate:a", 0.0, 0.25).set_delay(0.08)
-	# Gameplay fades in underneath.
+	var center := Vector2(SCREEN.x / 2.0, 880.0)
+	var ring := Pulse.new()
+	ring.position = center
+	add_child(ring)
+	move_child(ring, _flash.get_index())
+	var peak := transition_time * 0.35
+
+	var fx := _new_tween().set_parallel()
+	fx.tween_property(ring, "progress", 1.0, transition_time).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	fx.tween_property(_glow, "scale", _glow.scale * 1.6, peak).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	fx.tween_property(_glow, "modulate:a", 1.0, peak * 0.5)
+	for m in _monsters:
+		fx.tween_property(m, "glow", 1.0, peak).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	var t := _new_tween()
+	t.tween_property(_flash, "color:a", 0.85, peak).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	t.tween_callback(_swap_to_game)
+	t.tween_property(_flash, "color:a", 0.0, transition_time - peak).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	t.tween_callback(_hand_over)
+	GameAudio.play("bonus", 1.25)
+
+
+## Under the flash: hide the intro picture and show the game.
+func _swap_to_game() -> void:
+	for child in get_children():
+		if child != _flash and child is CanvasItem and not child is Pulse:
+			(child as CanvasItem).visible = false
 	for j in _hidden.size():
 		if is_instance_valid(_hidden[j]):
-			t.tween_property(_hidden[j], "modulate:a", _hidden_alpha[j], transition_time) \
-					.set_delay(0.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	t.chain().tween_callback(_hand_over)
+			_hidden[j].modulate.a = _hidden_alpha[j]
 
 
 func _hand_over() -> void:
@@ -489,7 +521,81 @@ func _new_tween() -> Tween:
 	return t
 
 
-## Soft oval shadow on the ground under the monster, with a faint pool of
+## One intro monster: its feet sit at `position` (+ `lift` above the ground,
+## + `hop`), `spin` turns it around its middle while in the air, and
+## `squash` / `lean` drive RUBBER_SHADER. Once `alive` it breathes, sways and
+## blinks by itself. It owns its ground shadow.
+class IntroMonster extends Node2D:
+	var tier := 1
+	var ground := Vector2.ZERO
+	var height := 0.0
+	var shadow: Shadow
+	var squash := 1.0
+	var lean := 0.0
+	var lift := 0.0
+	var hop := 0.0
+	var spin := 0.0
+	var jiggle := 1.0
+	var alive := 0.0
+	var glow := 0.0
+	var _spinner: Node2D
+	var _sprite: BlinkSprite
+	var _material: ShaderMaterial
+	var _phase := 0.0
+	var _time := 0.0
+
+	func setup(new_tier: int, width: float, feet: Vector2, shader: Shader) -> void:
+		tier = new_tier
+		ground = feet
+		position = feet
+		_phase = new_tier * 1.7
+		_sprite = BlinkSprite.new()
+		_sprite.set_tier(tier)
+		var tex := _sprite.texture.get_size()
+		var s := width / tex.x
+		height = tex.y * s
+		# Padded region so the shader has room to widen and lean the art.
+		var pad := Vector2(tex.x * 0.3, tex.y * 0.25)
+		_sprite.region_enabled = true
+		_sprite.region_rect = Rect2(-pad.x, -pad.y, tex.x + pad.x * 2.0, tex.y + pad.y + tex.y * 0.02)
+		_sprite.centered = false
+		_sprite.offset = Vector2(-tex.x / 2.0 - pad.x, -tex.y - pad.y)
+		_sprite.scale = Vector2(s, s)
+		_sprite.position = Vector2(0, height / 2.0)
+		_material = ShaderMaterial.new()
+		_material.shader = shader
+		_sprite.material = _material
+		_spinner = Node2D.new()
+		_spinner.position = Vector2(0, -height / 2.0)
+		_spinner.add_child(_sprite)
+		add_child(_spinner)
+		shadow = Shadow.new()
+		shadow.radius = width * 0.42
+		shadow.position = feet
+		shadow.modulate.a = 0.0
+
+	func blink() -> void:
+		_sprite.blink_now()
+
+	func _process(delta: float) -> void:
+		_time += delta
+		var breathe := sin(_time * 3.1 + _phase) * 0.022 * alive
+		var sway := sin(_time * 2.2 + _phase * 0.6) * 0.035 * alive
+		_material.set_shader_parameter("squash", squash * jiggle * (1.0 + breathe))
+		_material.set_shader_parameter("lean", lean + sway)
+		_spinner.rotation = spin
+		var up := lift + hop
+		position.y = ground.y - up
+		modulate = Color(1.0 + glow * 0.8, 1.0 + glow * 0.7, 1.0 + glow * 0.8)
+		# Shadow: shows only while near the ground, shrinking with height.
+		var near := clampf(1.0 - up / 320.0, 0.0, 1.0)
+		var visible_x := position.x > -60.0 and position.x < 780.0
+		shadow.position.x = position.x
+		shadow.modulate.a = near if visible and visible_x and up > -height * 0.6 else 0.0
+		shadow.scale = Vector2.ONE * lerpf(0.4, 1.0, near)
+
+
+## Soft oval shadow on the ground under a monster, with a faint pool of
 ## light round it so it still reads on the dark space background.
 class Shadow extends Node2D:
 	var radius := 50.0
@@ -500,6 +606,21 @@ class Shadow extends Node2D:
 			draw_circle(Vector2.ZERO, radius * (1.45 - k * 0.1), Color(0.78, 0.62, 1.0, 0.045))
 		for k in 5:
 			draw_circle(Vector2.ZERO, radius * (1.0 - k * 0.14), Color(0.03, 0.0, 0.08, 0.16))
+
+
+## Expanding ring of light for the transition.
+class Pulse extends Node2D:
+	var progress := 0.0:
+		set(v):
+			progress = v
+			queue_redraw()
+
+	func _draw() -> void:
+		var r := lerpf(40.0, 900.0, progress)
+		var a := 1.0 - progress
+		draw_circle(Vector2.ZERO, r * 0.6, Color(1.0, 0.92, 0.98, 0.25 * a))
+		draw_arc(Vector2.ZERO, r, 0, TAU, 96, Color(1.0, 0.8, 0.95, 0.35 * a), 40.0 * a + 4.0, true)
+		draw_arc(Vector2.ZERO, r, 0, TAU, 96, Color(1.0, 1.0, 1.0, 0.9 * a), 8.0 * a + 1.0, true)
 
 
 ## Soft radial glow texture: `color` in the middle fading to clear.
