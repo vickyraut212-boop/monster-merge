@@ -86,9 +86,11 @@ func get_power_up_button(power_up: String) -> TextureButton:
 	return _power_ups.get_node_or_null(power_up.capitalize()) as TextureButton
 
 
-## Shows how many uses a power-up has left in the round bubble at the top
-## right of its button. At 0 the button and bubble grey out.
-func set_power_up_count(power_up: String, count: int) -> void:
+## Shows whether a power-up is ready. Ready: a pink "1" bubble at the top
+## right of the button (each power-up holds one use). Cooling down: the button
+## greys out, a dark clock-wipe covers the part of the cooldown still to go,
+## and the time left ("2:59") sits in the middle of the button.
+func set_power_up_cooldown(power_up: String, left: float, total: float) -> void:
 	var button := get_power_up_button(power_up)
 	if button == null:
 		return
@@ -96,11 +98,39 @@ func set_power_up_count(power_up: String, count: int) -> void:
 	if badge == null:
 		badge = _make_count_badge()
 		button.add_child(badge)
-	(badge.get_node("Label") as Label).text = str(count)
-	var empty := count <= 0
-	(badge.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = \
-			Color(0.45, 0.42, 0.55) if empty else Color(1.0, 0.32, 0.52)
-	button.self_modulate = Color(0.5, 0.5, 0.58) if empty else Color.WHITE
+		(badge.get_node("Label") as Label).text = "1"
+	var overlay := button.get_node_or_null("Cooldown") as CooldownOverlay
+	if overlay == null:
+		overlay = CooldownOverlay.new()
+		overlay.name = "Cooldown"
+		button.add_child(overlay)
+	var cooling := left > 0.0
+	badge.visible = not cooling
+	overlay.visible = cooling
+	if cooling:
+		overlay.set_time(left, total)
+	button.self_modulate = Color(0.55, 0.52, 0.65) if cooling else Color.WHITE
+
+
+## "2:59" for a number of seconds (rounded up, so it never shows 0:00 early).
+static func format_cooldown(seconds: float) -> String:
+	var s := int(ceil(seconds))
+	return "%d:%02d" % [s / 60, s % 60]
+
+
+## A power-up's cooldown just ended: the button springs back with a soft glow
+## and its "1" bubble pops in.
+func flash_power_up_ready(power_up: String) -> void:
+	var button := get_power_up_button(power_up)
+	if button == null:
+		return
+	pop_power_up_count(power_up)
+	button.pivot_offset = button.size / 2.0
+	var t := button.create_tween()
+	t.tween_property(button, "scale", Vector2(1.12, 1.12), 0.12).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(button, "modulate", Color(1.35, 1.3, 1.15), 0.12)
+	t.tween_property(button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(button, "modulate", Color.WHITE, 0.4)
 
 
 ## Little bounce on a power-up's count bubble (when it gains a use).
@@ -134,6 +164,7 @@ func _make_count_badge() -> Panel:
 	badge.position = Vector2(84, -2)
 	badge.pivot_offset = badge.size / 2.0
 	var style := StyleBoxFlat.new()
+	style.bg_color = Color(1.0, 0.32, 0.52)
 	style.set_corner_radius_all(20)
 	style.set_border_width_all(3)
 	style.border_color = Color.WHITE
@@ -276,3 +307,53 @@ func set_game_over_best(best: int) -> void:
 func set_rank_state(state: GameOverPanel.RankState, rank := 0, total := 0) -> void:
 	_game_over.set_rank_state(state, rank, total)
 	_leaderboard.set_score_pending(state == GameOverPanel.RankState.PENDING)
+
+
+## Cooldown cover on a power-up button: a dark clock-wipe over the round
+## button for the time still to go, a thin light ring showing progress, and
+## the time left in the middle.
+class CooldownOverlay extends Control:
+	var _fraction := 0.0
+	var _label: Label
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		resized.connect(queue_redraw)
+		_label = Label.new()
+		_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_label.add_theme_font_size_override("font_size", 30)
+		_label.add_theme_color_override("font_color", Color.WHITE)
+		_label.add_theme_color_override("font_outline_color", Color(0.22, 0.1, 0.4))
+		_label.add_theme_constant_override("outline_size", 10)
+		var font := load("res://assets/fonts/LilitaOne-Regular.ttf") as Font
+		if font:
+			_label.add_theme_font_override("font", font)
+		add_child(_label)
+
+	func set_time(left: float, total: float) -> void:
+		var f := clampf(left / maxf(total, 0.001), 0.0, 1.0)
+		var text := Hud.format_cooldown(left)
+		if _label and _label.text != text:
+			_label.text = text
+		if absf(f - _fraction) > 0.0005:
+			_fraction = f
+			queue_redraw()
+
+	func _draw() -> void:
+		var c := size / 2.0
+		var r := minf(size.x, size.y) * 0.46
+		# Dark wipe for the part still to go (clockwise from 12 o'clock).
+		var start := -PI / 2.0 + TAU * (1.0 - _fraction)
+		var pts := PackedVector2Array([c])
+		var steps := maxi(3, int(48 * _fraction))
+		for i in steps + 1:
+			pts.append(c + Vector2.from_angle(lerpf(start, -PI / 2.0 + TAU - 0.002, float(i) / steps)) * r)
+		if _fraction > 0.01:
+			draw_colored_polygon(pts, Color(0.12, 0.06, 0.26, 0.55))
+		# Progress ring: the elapsed part glows.
+		draw_arc(c, r + 3.0, 0, TAU, 64, Color(0.12, 0.06, 0.26, 0.5), 6.0, true)
+		draw_arc(c, r + 3.0, -PI / 2.0, start, 64, Color(0.75, 0.9, 1.0, 0.95), 4.0, true)
