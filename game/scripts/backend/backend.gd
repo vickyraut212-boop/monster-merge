@@ -14,6 +14,7 @@ extends Node
 ## Call the methods without await, and listen to the signals for the answer:
 ##   submit_score(score, duration_ms, drops) -> score_submitted(result)
 ##   fetch_top(limit)                        -> leaderboard_loaded(entries, ok)
+##   fetch_daily(limit)                      -> daily_loaded(entries, ok)
 ##   set_display_name(name)                  -> name_changed(result)
 ##   fetch_me()                              -> me_loaded(result)
 ## Signals (rather than awaiting) keep things safe when the scene reloads
@@ -22,6 +23,13 @@ extends Node
 ## OFFLINE
 ## Nothing here ever blocks the game. If a score can't be sent, the best
 ## unsent run is saved and sent again on the next launch.
+##
+## SPEED
+## The last boards are kept (top_cache, daily_cache) so the leaderboard can
+## show them the moment it opens and refresh in the background. Both boards
+## are fetched once shortly after launch (which also wakes the game API up,
+## so its first real call isn't slow), and a request that is already on its
+## way is shared instead of sent twice.
 
 ## result: the POST /api/scores reply ({display_name, best_score, is_new_best,
 ## rank, total_players}); {"error": message} if the server rejected the run;
@@ -30,6 +38,9 @@ signal score_submitted(result: Dictionary)
 ## entries: [{player_id, display_name, best_score}, ...] best first.
 ## ok is false if the leaderboard could not be loaded.
 signal leaderboard_loaded(entries: Array, ok: bool)
+## entries: today's board (UTC day), same shape as leaderboard_loaded, where
+## best_score is the player's best score of the day.
+signal daily_loaded(entries: Array, ok: bool)
 ## result: {"display_name": name} on success, {"error": message} if the name
 ## was rejected, {} if the server could not be reached.
 signal name_changed(result: Dictionary)
@@ -43,6 +54,9 @@ const SESSION_PATH := "user://session.cfg"
 const REQUEST_TIMEOUT := 10.0
 ## Refresh the access token this many seconds before it runs out.
 const REFRESH_MARGIN := 60
+## Warm-up fetch of both boards this long after launch (keeps the first
+## frames smooth).
+const PREFETCH_DELAY := 1.5
 
 ## The signed-in player's id, "" until the first sign-in.
 var player_id := ""
@@ -60,6 +74,15 @@ var _session_busy := false
 ## Best run that has not reached the server yet ({} = none).
 var _pending := {}
 
+## Last loaded boards ([] until the first load) and when they arrived
+## (Time.get_ticks_msec(), 0 = never).
+var top_cache: Array = []
+var top_cache_msec := 0
+var daily_cache: Array = []
+var daily_cache_msec := 0
+var _top_busy := false
+var _daily_busy := false
+
 
 func _ready() -> void:
 	# Keep requests running while the game is paused (e.g. leaderboard open).
@@ -67,6 +90,10 @@ func _ready() -> void:
 	_load_session()
 	if is_configured() and not _pending.is_empty():
 		_send_pending.call_deferred()
+	if is_configured():
+		get_tree().create_timer(PREFETCH_DELAY, true).timeout.connect(func() -> void:
+			fetch_top()
+			fetch_daily())
 
 
 func is_configured() -> bool:
@@ -89,14 +116,40 @@ func fetch_top(limit := 100) -> void:
 	if not is_configured():
 		leaderboard_loaded.emit([], false)
 		return
+	if _top_busy:
+		return  # the request on its way answers for this call too
+	_top_busy = true
 	var path := "/rest/v1/leaderboard_entries?select=player_id,display_name,best_score" \
 			+ "&best_score=gt.0&order=best_score.desc,achieved_at.asc&limit=%d" % limit
 	# Public data: the publishable key alone is enough, no sign-in needed.
 	var response := await _request(HTTPClient.METHOD_GET, path, null, false)
+	_top_busy = false
 	if response["ok"] and response["data"] is Array:
-		leaderboard_loaded.emit(response["data"], true)
+		top_cache = response["data"]
+		top_cache_msec = Time.get_ticks_msec()
+		leaderboard_loaded.emit(top_cache, true)
 	else:
-		leaderboard_loaded.emit([], false)
+		leaderboard_loaded.emit(top_cache, false)
+
+
+## Loads today's board (GET /api/daily, public). Answers with daily_loaded.
+func fetch_daily(limit := 100) -> void:
+	if not is_configured():
+		daily_loaded.emit([], false)
+		return
+	if _daily_busy:
+		return
+	_daily_busy = true
+	var url := BackendConfig.API_URL.trim_suffix("/") + "/daily?limit=%d" % limit
+	var response := await _request_url(HTTPClient.METHOD_GET, url, null, false)
+	_daily_busy = false
+	var data: Variant = response["data"]
+	if response["ok"] and data is Dictionary and data.get("entries") is Array:
+		daily_cache = data["entries"]
+		daily_cache_msec = Time.get_ticks_msec()
+		daily_loaded.emit(daily_cache, true)
+	else:
+		daily_loaded.emit(daily_cache, false)
 
 
 ## Loads this player's own name, best score and rank from the server (the

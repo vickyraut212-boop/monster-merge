@@ -647,6 +647,7 @@ func _glow_button(mode: String) -> void:
 		var button := _hud.get_power_up_button(name)
 		if button:
 			button.modulate = Color.WHITE
+	_hud.set_power_up_active(mode)
 	if mode == "":
 		return
 	var active := _hud.get_power_up_button(mode)

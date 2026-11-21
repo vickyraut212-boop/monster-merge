@@ -42,6 +42,7 @@ const STARS := [
 
 
 func _ready() -> void:
+	ScreenFit.changed.connect(queue_redraw)
 	z_index = -100
 	z_as_relative = false
 	for planet in PLANETS:
@@ -53,11 +54,13 @@ func _ready() -> void:
 func _draw() -> void:
 	if background_texture == null:
 		return
-	# Cover the screen without stretching: scale to the larger ratio and centre.
+	# Cover the whole screen (taller phones show more of it, see ScreenFit)
+	# without stretching: scale to the larger ratio and centre.
+	var area := ScreenFit.screen_rect
 	var tex := background_texture.get_size()
-	var s := maxf(SCREEN.x / tex.x, SCREEN.y / tex.y)
+	var s := maxf(area.size.x / tex.x, area.size.y / tex.y)
 	var size := tex * s
-	draw_texture_rect(background_texture, Rect2((SCREEN - size) / 2.0, size), false)
+	draw_texture_rect(background_texture, Rect2(area.get_center() - size / 2.0, size), false)
 
 
 func _add_sprite(tex: Texture2D, center: Vector2, width: float, tilt: float, opacity: float, is_planet: bool) -> void:

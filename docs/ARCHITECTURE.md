@@ -34,8 +34,11 @@ An all-time board: each player's best score, top 100.
 | `public.score_runs` | Every submitted run (`score`, `duration_ms`, `drops`). Service role only. Use it to audit suspicious scores and to build weekly or daily boards later. |
 | `POST /functions/v1/api/scores` | Body `{score, duration_ms, drops}`. Rejects impossible runs (more than 50 points per drop, faster than 0.4 s per drop) and limits each player to one submit every 5 s. Logs the run, raises the best score, and returns `{display_name, best_score, is_new_best, rank, total_players}`. A new player gets a random name like "Bouncy Blob 4821". |
 | `GET /functions/v1/api/me` | The caller's own `{display_name, best_score, rank, total_players}`. A player with no entry gets one with a random name and a score of 0, which doesn't appear on the board. The leaderboard pop-up calls it each time it opens, so the name box always matches the server. |
+| `GET /functions/v1/api/daily` | Public. `{day, resets_at, entries}`: each player's best run of the current UTC day (from `score_runs`), best first, up to `?limit=` (max 100), plus the demo players' made-up daily scores (`daily.ts`). Sent with `Cache-Control: public, max-age=15`. |
 | `PUT /functions/v1/api/me/name` | Body `{name}`. Accepts 3–16 letters, digits, spaces, `_` or `-`, and checks a small blocklist (`_shared/names.ts`). |
 | Game | Reads the top 100 straight from `/rest/v1/leaderboard_entries` with the publishable key. The game-over panel shows the world rank. The pop-up is `scenes/leaderboard.tscn`, opened by the HUD's TOP button or by the game-over Leaderboard button. |
+
+Demo players: about 90 rows with `is_bot = true` (column hidden from clients) were seeded on 2026-11-21 so the board isn't empty; each is an anonymous `auth.users` row with a stable id. The seed migration says how to delete them all.
 
 Ranking is by `best_score` descending. On a tie, the earlier `achieved_at` ranks higher. Scores are computed on the device, so the server checks only catch impossible runs. If points, bonuses, `MAX_DROP_TIER` or power-ups change, update `MAX_POINTS_PER_DROP` in `functions/api/leaderboard.ts` to match.
 

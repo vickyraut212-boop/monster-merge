@@ -8,7 +8,7 @@
 // be used here, never in the game.
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import type { AuthVerifier, Entry, LeaderboardStore, Ranking, Run } from "./types.ts";
+import type { AuthVerifier, Entry, LeaderboardStore, PlayerCard, Ranking, Run, RunBest } from "./types.ts";
 
 export function serviceRoleClient(): SupabaseClient {
   return createClient(
@@ -84,6 +84,45 @@ export function supabaseStore(db: SupabaseClient): LeaderboardStore {
       }
       const total = counted(await countRows().gt("best_score", 0));
       return { rank: ahead + 1, total_players: total };
+    },
+
+    async bestRunsSince(sinceIso, limit): Promise<RunBest[]> {
+      // Best runs first; keep each player's first (= best) one. A day has few
+      // runs, and 2000 rows leave room for many runs per player.
+      const { data, error } = await db.from("score_runs")
+        .select("player_id, score, created_at")
+        .gte("created_at", sinceIso)
+        .gt("score", 0)
+        .order("score", { ascending: false })
+        .order("created_at", { ascending: true })
+        .limit(2000);
+      check(error, "read today's runs");
+      const best: RunBest[] = [];
+      const seen = new Set<string>();
+      for (const row of (data ?? []) as { player_id: string; score: number; created_at: string }[]) {
+        if (seen.has(row.player_id)) continue;
+        seen.add(row.player_id);
+        best.push({ player_id: row.player_id, score: row.score, at: row.created_at });
+        if (best.length >= limit) break;
+      }
+      return best;
+    },
+
+    async playerCards(playerIds): Promise<PlayerCard[]> {
+      if (playerIds.length === 0) return [];
+      const { data, error } = await entries()
+        .select("player_id, display_name, best_score, is_bot")
+        .in("player_id", playerIds);
+      check(error, "read players");
+      return (data ?? []) as PlayerCard[];
+    },
+
+    async demoPlayers(): Promise<PlayerCard[]> {
+      const { data, error } = await entries()
+        .select("player_id, display_name, best_score, is_bot")
+        .eq("is_bot", true);
+      check(error, "read demo players");
+      return (data ?? []) as PlayerCard[];
     },
   };
 }

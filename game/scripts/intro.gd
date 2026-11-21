@@ -150,6 +150,7 @@ func _start(main: Node) -> void:
 			_hide(child as CanvasItem)
 
 	_build()
+	ScreenFit.fit_layer(self)
 	_play()
 
 
