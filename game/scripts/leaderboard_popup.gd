@@ -36,14 +36,27 @@ extends Control
 ## AVATARS
 ## The backend has no avatar field yet, so the chosen avatar is saved on this
 ## device (user://profile.cfg) and only you see it. Other players get a
-## stable avatar picked from their player id. Daily Ranking needs a daily
-## board on the server, which doesn't exist yet, so that tab says so.
+## stable avatar picked from their player id.
+##
+## DAILY RANKING
+## Each player's best score of the current day (the day resets at midnight
+## UTC), from GET /api/daily. Your pinned row shows your rank for today.
+##
+## SPEED
+## The board opens with the last loaded rows straight away (Backend keeps
+## them, and fetches both boards shortly after launch), then refreshes in the
+## background. Rows are built a few per frame after the first screenful, so
+## opening never stalls the game.
 
 ## Play More was pressed (the board has already closed itself). The HUD
 ## starts a new game when the game-over panel is showing.
 signal play_more_pressed
 
 const TOP_LIMIT := 100
+## Rows built in the first frame (about one screenful); the rest follow
+## ROWS_PER_FRAME at a time.
+const FIRST_ROWS := 8
+const ROWS_PER_FRAME := 12
 const NAME_MIN := 3
 const NAME_MAX := 16
 const PROFILE_PATH := "user://profile.cfg"
@@ -171,6 +184,11 @@ var _tab := Tab.TOTAL
 var _entries: Array = []
 var _loaded_ok := false
 var _loading := false
+var _daily: Array = []
+var _daily_ok := false
+var _daily_loading := false
+## Bumped by every render, so rows still being built for an older render stop.
+var _render_gen := 0
 var _my_avatar := -1
 var _press_scroll := 0
 ## A just-finished game's score is still on its way to the server.
@@ -206,6 +224,7 @@ func _ready() -> void:
 	_load_profile()
 	_build()
 	Backend.leaderboard_loaded.connect(_on_leaderboard_loaded)
+	Backend.daily_loaded.connect(_on_daily_loaded)
 	Backend.name_changed.connect(_on_name_changed)
 	Backend.me_loaded.connect(_on_me_loaded)
 
@@ -219,17 +238,23 @@ func open() -> void:
 	_info.visible = false
 	_editor.visible = false
 	_select_tab(Tab.TOTAL, false)
-	_entries = []
-	_loaded_ok = false
+	# Show the last loaded boards at once; fresh ones replace them when they land.
+	_entries = Backend.top_cache
+	_loaded_ok = not _entries.is_empty()
+	_daily = Backend.daily_cache
+	_daily_ok = Backend.daily_cache_msec > 0
 	_focus_me = true
 	_update_caption()
 	if Backend.is_configured():
 		_loading = true
+		_daily_loading = true
 		# Ask the server who this player is (new players get a random name).
 		Backend.fetch_me()
 		Backend.fetch_top(TOP_LIMIT)
+		Backend.fetch_daily(TOP_LIMIT)
 	else:
 		_loading = false
+		_daily_loading = false
 	_render()
 
 
@@ -240,6 +265,7 @@ func refresh() -> void:
 	_focus_me = true
 	Backend.fetch_me()
 	Backend.fetch_top(TOP_LIMIT)
+	Backend.fetch_daily(TOP_LIMIT)
 
 
 ## Called by the HUD while a finished game's score is being sent. When it
@@ -285,18 +311,40 @@ func _on_leaderboard_loaded(entries: Array, ok: bool) -> void:
 	if not visible:
 		return
 	_loading = false
+	if not ok and _loaded_ok:
+		return  # keep showing the rows we have
+	var same := ok and _loaded_ok and entries == _entries
 	_loaded_ok = ok
 	_entries = entries if ok else []
-	_render()
+	if _tab == Tab.TOTAL and not same:
+		_render()
+	elif _tab == Tab.TOTAL:
+		_render_status()
+
+
+func _on_daily_loaded(entries: Array, ok: bool) -> void:
+	if not visible:
+		return
+	_daily_loading = false
+	if not ok and _daily_ok:
+		return
+	var same := ok and _daily_ok and entries == _daily
+	_daily_ok = ok
+	_daily = entries if ok else []
+	if _tab == Tab.DAILY and not same:
+		_render()
+	elif _tab == Tab.DAILY:
+		_render_status()
 
 
 ## The server's answer to "who am I": refreshes the pinned row (name, rank).
+## The list itself doesn't depend on it, so it isn't rebuilt.
 func _on_me_loaded(result: Dictionary) -> void:
 	if not visible or result.is_empty():
 		return
 	if _editor.visible and not _name_edit.has_focus() and not _saving:
 		_name_edit.text = Backend.display_name
-	_render()
+	_fill_pinned()
 
 
 func _is_me(entry: Dictionary) -> bool:
@@ -333,20 +381,51 @@ func _save_profile() -> void:
 
 # --- Drawing the data -------------------------------------------------------
 
-func _render() -> void:
-	_clear_rows()
-	var me_shown := false
+## The rows of the tab on screen.
+func _list() -> Array:
+	return _entries if _tab == Tab.TOTAL else _daily
 
-	var list: Array = _entries if _tab == Tab.TOTAL else []
+
+## Where the current player is in the list on screen (0 = not in it).
+func _my_place(list: Array) -> int:
+	for i in list.size():
+		if _is_me(list[i]):
+			return i + 1
+	return 0
+
+
+func _render() -> void:
+	_render_gen += 1
+	_clear_rows()
+	var list := _list()
 	for place in 3:
 		var entry: Dictionary = list[place] if place < list.size() else {}
-		me_shown = _fill_podium(place, entry) or me_shown
+		_fill_podium(place, entry)
+	_scroll.scroll_vertical = 0
+	var my_place := _my_place(list)
 
-	var my_row: Control = null
+	# Pinned row only when the player isn't already visible above.
+	_pinned.visible = my_place == 0
+	_scroll.size.y = (LIST_BOTTOM_WITH_PIN if _pinned.visible else LIST_BOTTOM_NO_PIN) - LIST_TOP
+	_status.size.y = _scroll.size.y
+	_render_status()
+	_fill_pinned()
+	_build_rows(list, _render_gen, my_place - 1)
+
+
+## Builds list rows #4 and down: the first screenful now, the rest a few per
+## frame (a newer render cancels this one).
+func _build_rows(list: Array, gen: int, my_index: int) -> void:
+	var budget := FIRST_ROWS
 	for i in range(3, list.size()):
+		if budget <= 0:
+			await get_tree().process_frame
+			if gen != _render_gen or not is_inside_tree():
+				return
+			budget = ROWS_PER_FRAME
+		budget -= 1
 		var entry: Dictionary = list[i]
-		var is_me := _is_me(entry)
-		me_shown = me_shown or is_me
+		var is_me := i == my_index
 		var row := _make_row(str(i + 1), str(entry.get("display_name", "?")),
 				_fmt(int(entry.get("best_score", 0))), _avatar_for(entry), is_me, i - 3, _row_width())
 		if is_me:
@@ -355,33 +434,28 @@ func _render() -> void:
 			row.mouse_default_cursor_shape = CURSOR_POINTING_HAND
 			row.tooltip_text = "Edit your profile"
 			row.gui_input.connect(_on_my_row_input)
-			my_row = row
 		_rows.add_child(row)
-	_scroll.scroll_vertical = 0
-	if _focus_me and my_row != null:
-		_scroll_to_row.call_deferred(my_row)
+		if is_me and _focus_me:
+			_scroll_to_row.call_deferred(row)
 
+
+## The message over the list (loading, offline, empty), hidden when rows show.
+func _render_status() -> void:
+	var list := _list()
+	var daily := _tab == Tab.DAILY
 	_status.visible = true
-	if _tab == Tab.DAILY:
-		_status.text = "Daily Ranking is coming soon!\nCheck Total Ranking for now."
-	elif not Backend.is_configured():
+	if not Backend.is_configured():
 		_status.text = "The online leaderboard isn't set up yet."
-	elif _loading:
+	elif list.is_empty() and (_daily_loading if daily else _loading):
 		_status.text = "Loading..."
-	elif not _loaded_ok:
+	elif not (_daily_ok if daily else _loaded_ok):
 		_status.text = "Can't reach the leaderboard.\nCheck your connection."
 	elif list.is_empty():
-		_status.text = "No scores yet. Be the first!"
+		_status.text = "No scores yet today. Be the first!" if daily else "No scores yet. Be the first!"
 	elif list.size() <= 3:
 		_status.text = "Only the podium so far.\nPlay to take a spot!"
 	else:
 		_status.visible = false
-
-	# Pinned row only when the player isn't already visible above.
-	_pinned.visible = not me_shown
-	_scroll.size.y = (LIST_BOTTOM_WITH_PIN if _pinned.visible else LIST_BOTTOM_NO_PIN) - LIST_TOP
-	_status.size.y = _scroll.size.y
-	_fill_pinned()
 
 
 ## Returns true if this place shows the current player.
@@ -406,10 +480,18 @@ func _fill_pinned() -> void:
 	for child in _pinned.get_children():
 		_pinned.remove_child(child)
 		child.queue_free()
-	var on_board := Backend.my_rank > 0 and _tab == Tab.TOTAL
-	var row := _make_row(str(Backend.my_rank) if on_board else "-",
+	var rank := 0
+	var score := 0
+	if _tab == Tab.TOTAL:
+		rank = Backend.my_rank
+		score = Backend.my_best
+	else:
+		rank = _my_place(_daily)
+		score = int(_daily[rank - 1].get("best_score", 0)) if rank > 0 else 0
+	var on_board := rank > 0
+	var row := _make_row(str(rank) if on_board else "-",
 			Backend.display_name if Backend.display_name != "" else "You",
-			_fmt(Backend.my_best) if on_board else "-",
+			_fmt(score) if on_board else "-",
 			AVATARS[_my_avatar_index()], true, 0, PINNED_RECT.size.x)
 	row.position = Vector2(0, (PINNED_RECT.size.y - ROW_H) / 2.0)
 	_pinned.add_child(row)
@@ -1039,7 +1121,7 @@ func _build_info() -> void:
 	var body := _label("", 27, LIGHT_TEXT, OUTLINE, 4)
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.text = "Total Ranking lists every player's best score of all time.\n\n" \
-			+ "Daily Ranking is coming soon.\n\n" \
+			+ "Daily Ranking lists everyone's best score today. It starts fresh every day.\n\n" \
 			+ "Your rank stays pinned at the bottom. Tap it, or the pencil at the top, " \
 			+ "to change your name and avatar."
 	_place(body, Rect2(48, 196, 504, 370))

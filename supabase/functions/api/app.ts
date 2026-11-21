@@ -4,6 +4,7 @@
 //
 // Routes (under basePath, "/api" on Supabase = /functions/v1/api/...):
 //   GET  /health     -> { ok: true }
+//   GET  /daily      -> today's board (UTC day) { day, resets_at, entries }, public
 //   GET  /me         -> own name, best score, rank (new players get a random name)
 //   POST /scores     -> submit a run   { score, duration_ms, drops }
 //   PUT  /me/name    -> change name    { name }
@@ -13,6 +14,10 @@
 import { Hono, type Context, type MiddlewareHandler } from "npm:hono@4.6.14";
 import { ApiError, type AuthVerifier, type LeaderboardStore } from "./types.ts";
 import { changeName, getMe, parseRun, submitScore } from "./leaderboard.ts";
+import { getDailyBoard } from "./daily.ts";
+
+/** Most players the daily board returns. */
+const DAILY_MAX_LIMIT = 100;
 
 export interface ApiDeps {
   store: LeaderboardStore;
@@ -69,6 +74,16 @@ export function createApp(deps: ApiDeps, basePath = "/api") {
   };
 
   app.get("/health", (c) => c.json({ ok: true }));
+
+  // Public, like the all-time board. A short shared cache keeps repeat opens
+  // fast and the function cheap; the board only changes when runs land.
+  app.get("/daily", async (c) => {
+    const asked = Number.parseInt(c.req.query("limit") ?? "", 10);
+    const limit = Number.isFinite(asked) ? Math.min(Math.max(asked, 1), DAILY_MAX_LIMIT) : DAILY_MAX_LIMIT;
+    const board = await getDailyBoard(deps.store, new Date(), limit);
+    c.header("Cache-Control", "public, max-age=15");
+    return c.json(board);
+  });
 
   app.get("/me", requirePlayer, async (c) => {
     return c.json(await getMe(deps.store, c.get("playerId")));

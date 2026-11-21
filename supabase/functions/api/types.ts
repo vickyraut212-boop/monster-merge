@@ -24,6 +24,21 @@ export interface Ranking {
   total_players: number; // players with a score above zero
 }
 
+/** A player's best run since some moment (for the Daily Ranking). */
+export interface RunBest {
+  player_id: string;
+  score: number;
+  at: string; // ISO time of that run
+}
+
+/** The public face of a player: name, all-time best, demo flag. */
+export interface PlayerCard {
+  player_id: string;
+  display_name: string;
+  best_score: number;
+  is_bot: boolean;
+}
+
 /** Where leaderboard data lives. Implementations throw on storage errors. */
 export interface LeaderboardStore {
   getEntry(playerId: string): Promise<Entry | null>;
@@ -34,6 +49,15 @@ export interface LeaderboardStore {
   setName(playerId: string, name: string): Promise<void>;
   /** Rank for a best score: higher scores first, then earlier achieved_at. */
   rankOf(bestScore: number, achievedAt: string | null): Promise<Ranking>;
+  /**
+   * Each player's best run (score above zero) submitted at or after sinceIso,
+   * best first, at most `limit` players.
+   */
+  bestRunsSince(sinceIso: string, limit: number): Promise<RunBest[]>;
+  /** Name and all-time best for these players (unknown ids are skipped). */
+  playerCards(playerIds: string[]): Promise<PlayerCard[]>;
+  /** Every demo player (is_bot), see migrations/*_leaderboard_demo_players.sql. */
+  demoPlayers(): Promise<PlayerCard[]>;
 }
 
 /** Turns a client's access token into a player id, or null if invalid. */

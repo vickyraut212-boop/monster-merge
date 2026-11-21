@@ -74,11 +74,17 @@ func _ready() -> void:
 		_bounce(_settings_button)
 		open_settings())
 	_connect_settings_popup()
+	var index := 0
 	for button: TextureButton in _power_ups.get_children():
 		var power_up := button.name.to_lower()
+		var fx := PowerUpFx.attach(button, power_up, index)
+		index += 1
 		button.pressed.connect(func() -> void:
-			_bounce(button)
+			GameAudio.play("click")
+			fx.press()
 			power_up_pressed.emit(power_up))
+	# Fill taller/wider screens: centre the HUD, stretch its dims (ScreenFit).
+	ScreenFit.fit_layer(self)
 
 
 ## The power-up button with this name ("merge", "bomb", "upgrade", "battery").
@@ -112,6 +118,9 @@ func set_power_up_cooldown(power_up: String, left: float, total: float) -> void:
 		dim.set_shader_parameter("amount", 0.0)
 		button.material = dim
 	var cooling := left > 0.0
+	var fx := button.get_node_or_null("Fx") as PowerUpFx
+	if fx:
+		fx.is_ready = not cooling
 	badge.visible = not cooling
 	overlay.visible = cooling
 	if cooling:
@@ -131,11 +140,18 @@ static func _dim_shader() -> Shader:
 		_dim_shader_cache.code = """
 shader_type canvas_item;
 uniform float amount = 0.0;
+// Position of the glossy light sweep across the icon (-1 = none), see PowerUpFx.
+uniform float shine = -1.0;
 void fragment() {
 	vec4 c = COLOR;
 	float grey = dot(c.rgb, vec3(0.3, 0.55, 0.15));
 	vec3 muted = mix(vec3(grey), vec3(0.62, 0.56, 0.78) * grey * 1.25, 0.35);
 	c.rgb = mix(c.rgb, muted * 0.72, amount * 0.85);
+	if (shine > -0.9) {
+		float d = abs(UV.x * 0.75 + UV.y * 0.55 - shine);
+		float band = (1.0 - smoothstep(0.0, 0.13, d)) * 0.6 + (1.0 - smoothstep(0.0, 0.04, d)) * 0.35;
+		c.rgb = mix(c.rgb, vec3(1.0), band * (1.0 - amount));
+	}
 	COLOR = c;
 }
 """
@@ -158,20 +174,30 @@ static func format_cooldown(seconds: float) -> String:
 
 
 ## A power-up's cooldown just ended: the icon eases back to full colour (see
-## set_power_up_cooldown), a soft ring of light pulses out once, the button
-## gives one gentle bounce and its "1" bubble pops in. No looping flash.
+## set_power_up_cooldown), a soft ring of light pulses out, the button does a
+## golden burst with a big bounce and a "READY!" tag (PowerUpFx.celebrate),
+## and its "1" bubble pops in.
 func flash_power_up_ready(power_up: String) -> void:
 	var button := get_power_up_button(power_up)
 	if button == null:
 		return
 	pop_power_up_count(power_up)
-	button.pivot_offset = button.size / 2.0
-	var t := button.create_tween()
-	t.tween_property(button, "scale", Vector2(1.08, 1.08), 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	t.tween_property(button, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	var fx := button.get_node_or_null("Fx") as PowerUpFx
+	if fx:
+		fx.is_ready = true
+		fx.celebrate()
 	var pulse := ReadyPulse.new()
 	button.add_child(pulse)
 	button.move_child(pulse, 0)
+
+
+## Marks which power-up is armed and waiting for a tap ("" = none): it gets a
+## heartbeat, a brighter aura and a spinning ring (PowerUpFx).
+func set_power_up_active(power_up: String) -> void:
+	for button: TextureButton in _power_ups.get_children():
+		var fx := button.get_node_or_null("Fx") as PowerUpFx
+		if fx:
+			fx.active = button.name.to_lower() == power_up
 
 
 ## Little bounce on a power-up's count bubble (when it gains a use).
